@@ -2,9 +2,16 @@ import * as vscode from 'vscode';
 import { Bookmark, BookmarkItem, CategoryItem } from '../models/bookmark';
 import { BookmarkStorageService } from '../services/bookmarkStorage';
 
-export class BookmarkTreeProvider implements vscode.TreeDataProvider<BookmarkItem | CategoryItem> {
+export class BookmarkTreeProvider implements 
+    vscode.TreeDataProvider<BookmarkItem | CategoryItem>, 
+    vscode.TreeDragAndDropController<BookmarkItem | CategoryItem> {
+    
     private _onDidChangeTreeData: vscode.EventEmitter<BookmarkItem | CategoryItem | undefined | null | void> = new vscode.EventEmitter<BookmarkItem | CategoryItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<BookmarkItem | CategoryItem | undefined | null | void> = this._onDidChangeTreeData.event;
+    
+    // Drag and drop MIME types
+    readonly dropMimeTypes = ['application/vnd.code.tree.bookmarkExplorer'];
+    readonly dragMimeTypes = ['application/vnd.code.tree.bookmarkExplorer'];
     
     constructor(private storageService: BookmarkStorageService) {}
     
@@ -110,6 +117,69 @@ export class BookmarkTreeProvider implements vscode.TreeDataProvider<BookmarkIte
         vscode.window.showInformationMessage(`Bookmark added to ${selectedCategory}: ${defaultLabel}`);
     }
     
+    async addCurrentFileBookmarkWithLabel(): Promise<void> {
+        const activeEditor = vscode.window.activeTextEditor;
+        if (!activeEditor) {
+            vscode.window.showErrorMessage('No active file to bookmark');
+            return;
+        }
+        
+        const filePath = activeEditor.document.fileName;
+        const currentLine = activeEditor.selection.active.line + 1;
+        const defaultLabel = `${this.getFileName(filePath)}:${currentLine}`;
+        
+        // Step 1: Get label from user first
+        const label = await vscode.window.showInputBox({
+            prompt: 'Enter bookmark label',
+            placeHolder: 'Enter descriptive label for this bookmark',
+            value: defaultLabel
+        });
+        
+        if (label === undefined) {
+            return; // User cancelled
+        }
+        
+        // Step 2: Get category selection
+        const categories = await this.storageService.getCategories();
+        const categoryOptions = [...categories, '+ Create New Category'];
+        
+        const selectedOption = await vscode.window.showQuickPick(categoryOptions, {
+            placeHolder: 'Select category for bookmark'
+        });
+        
+        if (selectedOption === undefined) {
+            return; // User cancelled
+        }
+        
+        let selectedCategory = selectedOption;
+        if (selectedOption === '+ Create New Category') {
+            const newCategory = await vscode.window.showInputBox({
+                prompt: 'Enter new category name',
+                placeHolder: 'My Category'
+            });
+            
+            if (!newCategory) {
+                return; // User cancelled
+            }
+            selectedCategory = newCategory;
+        }
+        
+        const bookmark: Bookmark = {
+            id: this.storageService.generateBookmarkId(),
+            filePath: filePath,
+            label: label,
+            lineNumber: currentLine,
+            workspacePath: vscode.workspace.getWorkspaceFolder(activeEditor.document.uri)?.uri.fsPath,
+            category: selectedCategory,
+            createdAt: new Date()
+        };
+        
+        await this.storageService.addBookmark(bookmark);
+        this.refresh();
+        
+        vscode.window.showInformationMessage(`Bookmark added to ${selectedCategory}: ${label}`);
+    }
+    
     async removeBookmark(bookmarkItem: BookmarkItem): Promise<void> {
         await this.storageService.removeBookmark(bookmarkItem.bookmark.id);
         this.refresh();
@@ -161,37 +231,6 @@ export class BookmarkTreeProvider implements vscode.TreeDataProvider<BookmarkIte
         }
     }
     
-    async moveBookmarkToCategory(bookmarkItem: BookmarkItem): Promise<void> {
-        const categories = await this.storageService.getCategories();
-        const categoryOptions = [...categories, '+ Create New Category'];
-        
-        const selectedOption = await vscode.window.showQuickPick(categoryOptions, {
-            placeHolder: 'Move bookmark to category'
-        });
-        
-        if (selectedOption === undefined) {
-            return; // User cancelled
-        }
-        
-        let targetCategory = selectedOption;
-        
-        if (selectedOption === '+ Create New Category') {
-            const newCategory = await vscode.window.showInputBox({
-                prompt: 'Enter new category name',
-                placeHolder: 'My Category'
-            });
-            
-            if (!newCategory) {
-                return; // User cancelled
-            }
-            targetCategory = newCategory;
-        }
-        
-        await this.storageService.moveBookmarkToCategory(bookmarkItem.bookmark.id, targetCategory);
-        this.refresh();
-        
-        vscode.window.showInformationMessage(`Bookmark moved to ${targetCategory}`);
-    }
     
     async renameCategory(categoryItem: CategoryItem): Promise<void> {
         const newName = await vscode.window.showInputBox({
@@ -286,6 +325,79 @@ export class BookmarkTreeProvider implements vscode.TreeDataProvider<BookmarkIte
         
         if (selected) {
             await this.openBookmarkFile(selected.bookmark);
+        }
+    }
+    
+    // Drag and Drop Implementation
+    async handleDrag(source: (BookmarkItem | CategoryItem)[], treeDataTransfer: vscode.DataTransfer, _token: vscode.CancellationToken): Promise<void> {
+        // Only allow dragging bookmarks, not categories
+        const bookmarkItems = source.filter(item => item instanceof BookmarkItem) as BookmarkItem[];
+        if (bookmarkItems.length === 0) {
+            return;
+        }
+        
+        // Store the bookmark data for transfer
+        const draggedData = bookmarkItems.map(item => ({
+            id: item.bookmark.id,
+            filePath: item.bookmark.filePath,
+            label: item.bookmark.label,
+            lineNumber: item.bookmark.lineNumber,
+            category: item.bookmark.category
+        }));
+        
+        treeDataTransfer.set('application/vnd.code.tree.bookmarkExplorer', new vscode.DataTransferItem(draggedData));
+    }
+    
+    async handleDrop(target: BookmarkItem | CategoryItem | undefined, dataTransfer: vscode.DataTransfer, _token: vscode.CancellationToken): Promise<void> {
+        // Get the dragged bookmark data
+        const transferItem = dataTransfer.get('application/vnd.code.tree.bookmarkExplorer');
+        if (!transferItem) {
+            return;
+        }
+        
+        const draggedBookmarks = transferItem.value as Array<{
+            id: string;
+            filePath: string;
+            label?: string;
+            lineNumber?: number;
+            category?: string;
+        }>;
+        
+        if (!draggedBookmarks || draggedBookmarks.length === 0) {
+            return;
+        }
+        
+        // Determine target category
+        let targetCategory = 'General';
+        
+        if (target instanceof CategoryItem) {
+            // Dropped on a category folder
+            targetCategory = target.categoryName;
+        } else if (target instanceof BookmarkItem) {
+            // Dropped on another bookmark - use that bookmark's category
+            targetCategory = target.bookmark.category || 'General';
+        }
+        // If target is undefined, dropped on empty space - use General
+        
+        // Move each dragged bookmark to the target category
+        let movedCount = 0;
+        for (const draggedBookmark of draggedBookmarks) {
+            // Skip if already in target category
+            if ((draggedBookmark.category || 'General') === targetCategory) {
+                continue;
+            }
+            
+            await this.storageService.moveBookmarkToCategory(draggedBookmark.id, targetCategory);
+            movedCount++;
+        }
+        
+        if (movedCount > 0) {
+            this.refresh();
+            
+            const bookmarkText = movedCount === 1 ? 'bookmark' : 'bookmarks';
+            vscode.window.showInformationMessage(
+                `Moved ${movedCount} ${bookmarkText} to "${targetCategory}" category`
+            );
         }
     }
     

@@ -14,7 +14,8 @@ export function activate(context: vscode.ExtensionContext) {
 	const treeView = vscode.window.createTreeView('bookmarkExplorer', {
 		treeDataProvider: treeProvider,
 		showCollapseAll: true,
-		canSelectMany: false
+		canSelectMany: false,
+		dragAndDropController: treeProvider
 	});
 	
 	// Register commands
@@ -24,14 +25,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}),
 		
 		vscode.commands.registerCommand('bookmark-extension.addBookmarkWithLabel', async () => {
-			const label = await vscode.window.showInputBox({
-				prompt: 'Enter bookmark label',
-				placeHolder: 'My bookmark label'
-			});
-			
-			if (label !== undefined) {
-				await treeProvider.addCurrentFileBookmark(label);
-			}
+			await treeProvider.addCurrentFileBookmarkWithLabel();
 		}),
 		
 		vscode.commands.registerCommand('bookmark-extension.removeBookmark', async (bookmarkItem: BookmarkItem) => {
@@ -60,11 +54,6 @@ export function activate(context: vscode.ExtensionContext) {
 		}),
 		
 		// Category management commands
-		vscode.commands.registerCommand('bookmark-extension.moveBookmarkToCategory', async (bookmarkItem: BookmarkItem) => {
-			if (bookmarkItem && bookmarkItem.bookmark) {
-				await treeProvider.moveBookmarkToCategory(bookmarkItem);
-			}
-		}),
 		
 		vscode.commands.registerCommand('bookmark-extension.renameCategory', async (categoryItem: CategoryItem) => {
 			if (categoryItem && categoryItem.categoryName) {
