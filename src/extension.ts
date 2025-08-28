@@ -1,26 +1,106 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { BookmarkStorageService } from './services/bookmarkStorage';
+import { BookmarkTreeProvider } from './providers/bookmarkTreeProvider';
+import { BookmarkItem, CategoryItem } from './models/bookmark';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "bookmark-extension" is now active!');
-
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('bookmark-extension.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from bookmark-extension!');
+	console.log('Bookmark Extension is now active!');
+	
+	// Initialize services
+	const storageService = new BookmarkStorageService(context);
+	const treeProvider = new BookmarkTreeProvider(storageService);
+	
+	// Register tree data provider
+	const treeView = vscode.window.createTreeView('bookmarkExplorer', {
+		treeDataProvider: treeProvider,
+		showCollapseAll: true,
+		canSelectMany: false
 	});
-
-	context.subscriptions.push(disposable);
+	
+	// Register commands
+	const commands = [
+		vscode.commands.registerCommand('bookmark-extension.addBookmark', async () => {
+			await treeProvider.addCurrentFileBookmark();
+		}),
+		
+		vscode.commands.registerCommand('bookmark-extension.addBookmarkWithLabel', async () => {
+			const label = await vscode.window.showInputBox({
+				prompt: 'Enter bookmark label',
+				placeHolder: 'My bookmark label'
+			});
+			
+			if (label !== undefined) {
+				await treeProvider.addCurrentFileBookmark(label);
+			}
+		}),
+		
+		vscode.commands.registerCommand('bookmark-extension.removeBookmark', async (bookmarkItem: BookmarkItem) => {
+			if (bookmarkItem && bookmarkItem.bookmark) {
+				await treeProvider.removeBookmark(bookmarkItem);
+			}
+		}),
+		
+		vscode.commands.registerCommand('bookmark-extension.editBookmarkLabel', async (bookmarkItem: BookmarkItem) => {
+			if (bookmarkItem && bookmarkItem.bookmark) {
+				await treeProvider.editBookmarkLabel(bookmarkItem);
+			}
+		}),
+		
+		vscode.commands.registerCommand('bookmark-extension.clearAllBookmarks', async () => {
+			await treeProvider.clearAllBookmarks();
+		}),
+		
+		vscode.commands.registerCommand('bookmark-extension.refreshBookmarks', () => {
+			treeProvider.refresh();
+		}),
+		
+		// Command for opening bookmarked files (used by TreeItem command)
+		vscode.commands.registerCommand('bookmark-extension.openBookmark', async (bookmark) => {
+			await treeProvider.openBookmarkFile(bookmark);
+		}),
+		
+		// Category management commands
+		vscode.commands.registerCommand('bookmark-extension.moveBookmarkToCategory', async (bookmarkItem: BookmarkItem) => {
+			if (bookmarkItem && bookmarkItem.bookmark) {
+				await treeProvider.moveBookmarkToCategory(bookmarkItem);
+			}
+		}),
+		
+		vscode.commands.registerCommand('bookmark-extension.renameCategory', async (categoryItem: CategoryItem) => {
+			if (categoryItem && categoryItem.categoryName) {
+				await treeProvider.renameCategory(categoryItem);
+			}
+		}),
+		
+		vscode.commands.registerCommand('bookmark-extension.removeCategory', async (categoryItem: CategoryItem) => {
+			if (categoryItem && categoryItem.categoryName) {
+				await treeProvider.removeCategory(categoryItem);
+			}
+		}),
+		
+		vscode.commands.registerCommand('bookmark-extension.createNewCategory', async () => {
+			await treeProvider.createNewCategory();
+		}),
+		
+		vscode.commands.registerCommand('bookmark-extension.searchBookmarks', async () => {
+			await treeProvider.searchBookmarks();
+		})
+	];
+	
+	// Add all disposables to context
+	context.subscriptions.push(treeView, ...commands);
+	
+	// Optional: Show welcome message on first activation
+	const hasShownWelcome = context.globalState.get('hasShownWelcome', false);
+	if (!hasShownWelcome) {
+		vscode.window.showInformationMessage(
+			'Bookmark Extension activated! Right-click in any file to add bookmarks.',
+			'Got it!'
+		);
+		context.globalState.update('hasShownWelcome', true);
+	}
 }
 
-// This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() {
+	// Cleanup if needed
+}

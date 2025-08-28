@@ -1,7 +1,7 @@
 {
   "name": "bookmark-extension",
-  "displayName": "bookmark-extension",
-  "description": "",
+  "displayName": "File Bookmarks",
+  "description": "Bookmark and organize your favorite files for quick access",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.103.0"
@@ -14,8 +14,183 @@
   "contributes": {
     "commands": [
       {
-        "command": "bookmark-extension.helloWorld",
-        "title": "Hello World"
+        "command": "bookmark-extension.addBookmark",
+        "title": "Add Bookmark",
+        "icon": "$(bookmark)"
+      },
+      {
+        "command": "bookmark-extension.addBookmarkWithLabel",
+        "title": "Add Bookmark with Label",
+        "icon": "$(tag)"
+      },
+      {
+        "command": "bookmark-extension.removeBookmark",
+        "title": "Remove Bookmark",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "bookmark-extension.editBookmarkLabel",
+        "title": "Edit Label",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "bookmark-extension.clearAllBookmarks",
+        "title": "Clear All Bookmarks",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "bookmark-extension.refreshBookmarks",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "bookmark-extension.moveBookmarkToCategory",
+        "title": "Move to Category",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "bookmark-extension.renameCategory",
+        "title": "Rename Category",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "bookmark-extension.removeCategory",
+        "title": "Remove Category",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "bookmark-extension.createNewCategory",
+        "title": "New Category",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "bookmark-extension.searchBookmarks",
+        "title": "Search Bookmarks",
+        "icon": "$(search)"
+      }
+    ],
+    "views": {
+      "bookmarkView": [
+        {
+          "id": "bookmarkExplorer",
+          "name": "Bookmarks",
+          "when": "true"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "bookmarkView",
+          "title": "Bookmarks",
+          "icon": "$(bookmark)"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "bookmarkExplorer",
+        "contents": "No bookmarks found.\n[Add Bookmark](command:bookmark-extension.addBookmark)\nTo add a bookmark, open a file and use the command palette or right-click menu."
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "bookmark-extension.addBookmark",
+          "when": "view == bookmarkExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "bookmark-extension.clearAllBookmarks",
+          "when": "view == bookmarkExplorer",
+          "group": "navigation@2"
+        },
+        {
+          "command": "bookmark-extension.searchBookmarks",
+          "when": "view == bookmarkExplorer",
+          "group": "navigation@3"
+        },
+        {
+          "command": "bookmark-extension.refreshBookmarks",
+          "when": "view == bookmarkExplorer",
+          "group": "navigation@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "bookmark-extension.editBookmarkLabel",
+          "when": "view == bookmarkExplorer && viewItem == bookmark",
+          "group": "inline@1"
+        },
+        {
+          "command": "bookmark-extension.moveBookmarkToCategory",
+          "when": "view == bookmarkExplorer && viewItem == bookmark",
+          "group": "inline@2"
+        },
+        {
+          "command": "bookmark-extension.removeBookmark",
+          "when": "view == bookmarkExplorer && viewItem == bookmark",
+          "group": "inline@3"
+        },
+        {
+          "command": "bookmark-extension.renameCategory",
+          "when": "view == bookmarkExplorer && viewItem == category",
+          "group": "inline@1"
+        },
+        {
+          "command": "bookmark-extension.removeCategory",
+          "when": "view == bookmarkExplorer && viewItem == category",
+          "group": "inline@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "bookmark-extension.addBookmark",
+          "group": "bookmarks@1",
+          "when": "editorFocus"
+        },
+        {
+          "command": "bookmark-extension.addBookmarkWithLabel",
+          "group": "bookmarks@2",
+          "when": "editorFocus"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "bookmark-extension.removeBookmark",
+          "when": "false"
+        },
+        {
+          "command": "bookmark-extension.moveBookmarkToCategory",
+          "when": "false"
+        },
+        {
+          "command": "bookmark-extension.renameCategory",
+          "when": "false"
+        },
+        {
+          "command": "bookmark-extension.removeCategory",
+          "when": "false"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "bookmark-extension.addBookmark",
+        "key": "ctrl+alt+b",
+        "mac": "cmd+alt+b",
+        "when": "editorFocus"
+      },
+      {
+        "command": "bookmark-extension.addBookmarkWithLabel",
+        "key": "ctrl+alt+shift+b",
+        "mac": "cmd+alt+shift+b",
+        "when": "editorFocus"
+      },
+      {
+        "command": "bookmark-extension.searchBookmarks",
+        "key": "ctrl+alt+f",
+        "mac": "cmd+alt+f"
       }
     ]
   },
