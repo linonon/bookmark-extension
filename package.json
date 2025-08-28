@@ -152,10 +152,6 @@
           "when": "false"
         },
         {
-          "command": "bookmark-extension.moveBookmarkToCategory",
-          "when": "false"
-        },
-        {
           "command": "bookmark-extension.renameCategory",
           "when": "false"
         },

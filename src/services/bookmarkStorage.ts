@@ -65,6 +65,10 @@ export class BookmarkStorageService {
         await this.saveBookmarks([]);
     }
     
+    async replaceAllBookmarks(bookmarks: BookmarkData): Promise<void> {
+        await this.saveBookmarks(bookmarks);
+    }
+    
     private async saveBookmarks(bookmarks: BookmarkData): Promise<void> {
         await this.context.globalState.update(BookmarkStorageService.STORAGE_KEY, bookmarks);
     }
@@ -103,19 +107,8 @@ export class BookmarkStorageService {
             categorizedBookmarks.get(category)!.push(bookmark);
         }
         
-        // Sort bookmarks within each category
-        for (const [category, bookmarks] of categorizedBookmarks) {
-            bookmarks.sort((a, b) => {
-                const aFileName = this.getFileName(a.filePath);
-                const bFileName = this.getFileName(b.filePath);
-                
-                if (aFileName !== bFileName) {
-                    return aFileName.localeCompare(bFileName);
-                }
-                
-                return (a.lineNumber || 0) - (b.lineNumber || 0);
-            });
-        }
+        // Keep the original order from storage (user-defined order via drag-and-drop)
+        // Only sort if no custom order has been set via drag-and-drop
         
         return categorizedBookmarks;
     }

@@ -79,15 +79,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// Add all disposables to context
 	context.subscriptions.push(treeView, ...commands);
 	
-	// Optional: Show welcome message on first activation
-	const hasShownWelcome = context.globalState.get('hasShownWelcome', false);
-	if (!hasShownWelcome) {
-		vscode.window.showInformationMessage(
-			'Bookmark Extension activated! Right-click in any file to add bookmarks.',
-			'Got it!'
-		);
-		context.globalState.update('hasShownWelcome', true);
-	}
+	// Extension activated silently
 }
 
 export function deactivate() {

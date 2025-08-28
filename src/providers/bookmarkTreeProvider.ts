@@ -113,8 +113,6 @@ export class BookmarkTreeProvider implements
         
         await this.storageService.addBookmark(bookmark);
         this.refresh();
-        
-        vscode.window.showInformationMessage(`Bookmark added to ${selectedCategory}: ${defaultLabel}`);
     }
     
     async addCurrentFileBookmarkWithLabel(): Promise<void> {
@@ -176,15 +174,11 @@ export class BookmarkTreeProvider implements
         
         await this.storageService.addBookmark(bookmark);
         this.refresh();
-        
-        vscode.window.showInformationMessage(`Bookmark added to ${selectedCategory}: ${label}`);
     }
     
     async removeBookmark(bookmarkItem: BookmarkItem): Promise<void> {
         await this.storageService.removeBookmark(bookmarkItem.bookmark.id);
         this.refresh();
-        
-        vscode.window.showInformationMessage(`Bookmark removed: ${bookmarkItem.bookmark.label || bookmarkItem.bookmark.filePath}`);
     }
     
     async editBookmarkLabel(bookmarkItem: BookmarkItem): Promise<void> {
@@ -196,8 +190,6 @@ export class BookmarkTreeProvider implements
         if (newLabel !== undefined && newLabel !== bookmarkItem.bookmark.label) {
             await this.storageService.updateBookmark(bookmarkItem.bookmark.id, { label: newLabel });
             this.refresh();
-            
-            vscode.window.showInformationMessage(`Bookmark label updated to: ${newLabel}`);
         }
     }
     
@@ -212,7 +204,6 @@ export class BookmarkTreeProvider implements
         if (confirmation === 'Yes') {
             await this.storageService.clearAllBookmarks();
             this.refresh();
-            vscode.window.showInformationMessage('All bookmarks cleared');
         }
     }
     
@@ -249,7 +240,6 @@ export class BookmarkTreeProvider implements
             }
             
             this.refresh();
-            vscode.window.showInformationMessage(`Category renamed to: ${newName}`);
         }
     }
     
@@ -264,7 +254,6 @@ export class BookmarkTreeProvider implements
         if (confirmation === 'Remove') {
             await this.storageService.removeCategory(categoryItem.categoryName);
             this.refresh();
-            vscode.window.showInformationMessage(`Category "${categoryItem.categoryName}" removed`);
         }
     }
     
@@ -276,7 +265,6 @@ export class BookmarkTreeProvider implements
         
         if (categoryName) {
             // Category will be created when first bookmark is added to it
-            vscode.window.showInformationMessage(`Category "${categoryName}" will be created when you add a bookmark to it.`);
         }
     }
     
@@ -305,7 +293,6 @@ export class BookmarkTreeProvider implements
         });
         
         if (filteredBookmarks.length === 0) {
-            vscode.window.showInformationMessage(`No bookmarks found for: ${searchTerm}`);
             return;
         }
         
@@ -367,38 +354,85 @@ export class BookmarkTreeProvider implements
             return;
         }
         
-        // Determine target category
+        // Only handle single bookmark drag for reordering
+        if (draggedBookmarks.length > 1) {
+            vscode.window.showWarningMessage('Multiple bookmark reordering is not supported');
+            return;
+        }
+        
+        const draggedBookmark = draggedBookmarks[0];
+        
+        // Determine target category and position
         let targetCategory = 'General';
+        let targetPosition: number | undefined;
         
         if (target instanceof CategoryItem) {
-            // Dropped on a category folder
+            // Dropped on a category folder - move to category, append at end
             targetCategory = target.categoryName;
         } else if (target instanceof BookmarkItem) {
-            // Dropped on another bookmark - use that bookmark's category
+            // Dropped on another bookmark
             targetCategory = target.bookmark.category || 'General';
-        }
-        // If target is undefined, dropped on empty space - use General
-        
-        // Move each dragged bookmark to the target category
-        let movedCount = 0;
-        for (const draggedBookmark of draggedBookmarks) {
-            // Skip if already in target category
-            if ((draggedBookmark.category || 'General') === targetCategory) {
-                continue;
+            const currentCategory = draggedBookmark.category || 'General';
+            
+            if (currentCategory === targetCategory) {
+                // Same category - this is a reorder operation
+                const categorizedBookmarks = await this.storageService.getBookmarksByCategory();
+                const categoryBookmarks = categorizedBookmarks.get(targetCategory) || [];
+                
+                // Find target position
+                targetPosition = categoryBookmarks.findIndex(b => b.id === target.bookmark.id);
+                
+                // Reorder within category
+                await this.reorderBookmarkInCategory(draggedBookmark.id, targetCategory, targetPosition);
+                return;
             }
-            
-            await this.storageService.moveBookmarkToCategory(draggedBookmark.id, targetCategory);
-            movedCount++;
+        } else {
+            // Dropped on empty space - use General category
+            targetCategory = 'General';
         }
         
-        if (movedCount > 0) {
+        // Cross-category move
+        const currentCategory = draggedBookmark.category || 'General';
+        if (currentCategory !== targetCategory) {
+            await this.storageService.moveBookmarkToCategory(draggedBookmark.id, targetCategory);
             this.refresh();
-            
-            const bookmarkText = movedCount === 1 ? 'bookmark' : 'bookmarks';
-            vscode.window.showInformationMessage(
-                `Moved ${movedCount} ${bookmarkText} to "${targetCategory}" category`
-            );
         }
+    }
+    
+    private async reorderBookmarkInCategory(bookmarkId: string, categoryName: string, targetPosition: number): Promise<void> {
+        const allBookmarks = await this.storageService.getBookmarks();
+        const draggedBookmarkIndex = allBookmarks.findIndex(b => b.id === bookmarkId);
+        
+        if (draggedBookmarkIndex === -1) {
+            return;
+        }
+        
+        // Get all bookmarks in the target category
+        const categoryBookmarks = allBookmarks.filter(b => (b.category || 'General') === categoryName);
+        const otherBookmarks = allBookmarks.filter(b => (b.category || 'General') !== categoryName);
+        
+        // Remove the dragged bookmark from category list
+        const draggedBookmark = categoryBookmarks.find(b => b.id === bookmarkId);
+        if (!draggedBookmark) {
+            return;
+        }
+        
+        const filteredCategoryBookmarks = categoryBookmarks.filter(b => b.id !== bookmarkId);
+        
+        // Insert at target position
+        if (targetPosition >= 0 && targetPosition < filteredCategoryBookmarks.length) {
+            filteredCategoryBookmarks.splice(targetPosition, 0, draggedBookmark);
+        } else {
+            // Append at end if position is invalid
+            filteredCategoryBookmarks.push(draggedBookmark);
+        }
+        
+        // Reconstruct the full bookmark list
+        const reorderedBookmarks = [...otherBookmarks, ...filteredCategoryBookmarks];
+        
+        // Save the reordered bookmarks
+        await this.storageService.replaceAllBookmarks(reorderedBookmarks);
+        this.refresh();
     }
     
 }
