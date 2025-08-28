@@ -1,71 +1,100 @@
-# bookmark-extension README
+# Bookmarker
 
-This is the README for your extension "bookmark-extension". After writing up a brief description, we recommend including the following sections.
+A powerful and intuitive VS Code extension for bookmarking and organizing your favorite files with precision and ease.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+✨ **Smart Bookmarking**
+- Bookmark any file at specific line numbers
+- Quick access through intuitive tree view
+- One-click navigation to exact locations
 
-For example if there is an image subfolder under your extension project workspace:
+📁 **Hierarchical Organization**
+- Create nested categories and subcategories
+- Drag & drop bookmarks between categories
+- Visual folder structure with expandable/collapsible views
 
-\!\[feature X\]\(images/feature-x.png\)
+🔍 **Powerful Search**
+- Search bookmarks by name, file path, category, or label
+- Quick access through `Ctrl+Alt+F` (or `Cmd+Alt+F` on Mac)
+- Instant filtering with real-time results
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+🎯 **Dual Storage System**
+- Global bookmarks: Available across all projects
+- Workspace bookmarks: Project-specific organization
+- Automatic file validation and cleanup
 
-## Requirements
+📤 **Import & Export**
+- Backup your bookmarks as JSON files
+- Share bookmark collections with team members
+- Merge or replace existing bookmarks
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+🎨 **Native Integration**
+- Uses VS Code's file icon themes automatically
+- Seamless integration with VS Code's UI design
+- Professional context menus and shortcuts
+
+## Quick Start
+
+### Creating Bookmarks
+- **Add Bookmark**: `Ctrl+Alt+B` (Mac: `Cmd+Alt+B`)
+- **Add Labeled Bookmark**: `Ctrl+Alt+Shift+B` (Mac: `Cmd+Alt+Shift+B`)
+- **Right-click** in any file and select "Bookmarker: Add Bookmark"
+
+### Searching Bookmarks
+- **Search**: `Ctrl+Alt+F` (Mac: `Cmd+Alt+F`)
+- Type any part of filename, path, label, or category
+
+### Managing Categories
+- Right-click in the Bookmarker panel to create new categories
+- Drag bookmarks between categories
+- Create nested categories with `/` separator (e.g., "Frontend/React")
+
+## Commands
+
+All commands are prefixed with "Bookmarker:" for easy identification:
+
+- `Bookmarker: Add Bookmark` - Add current file/line to bookmarks
+- `Bookmarker: Add Bookmark with Label` - Add with custom label
+- `Bookmarker: Search Bookmarks` - Open bookmark search
+- `Bookmarker: Clear All Bookmarks` - Remove all bookmarks
+- `Bookmarker: New Category` - Create new bookmark category
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+This extension works out of the box with no configuration required. Bookmarks are automatically stored in VS Code's global and workspace state.
 
-For example:
+## Keyboard Shortcuts
 
-This extension contributes the following settings:
+| Command | Windows/Linux | Mac | Description |
+|---------|---------------|-----|-------------|
+| Add Bookmark | `Ctrl+Alt+B` | `Cmd+Alt+B` | Bookmark current file/line |
+| Add Labeled Bookmark | `Ctrl+Alt+Shift+B` | `Cmd+Alt+Shift+B` | Add bookmark with custom label |
+| Search Bookmarks | `Ctrl+Alt+F` | `Cmd+Alt+F` | Open bookmark search |
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+## Requirements
 
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
+- Visual Studio Code 1.103.0 or later
+- No additional dependencies required
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.0.1
 
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+Initial release of Bookmarker:
+- ✨ Smart bookmarking with line-specific precision
+- 📁 Hierarchical category system with drag & drop
+- 🔍 Powerful search and filtering capabilities  
+- 📤 Import/export functionality for backup and sharing
+- 🎯 Dual storage system (global + workspace bookmarks)
+- 🎨 Native VS Code icon theme integration
+- ⌨️ Complete keyboard shortcut support
+- 🖱️ Professional context menus and UI integration
 
 ---
 
-## Following extension guidelines
+## Contributing
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+Found a bug or have a feature request? Please open an issue on our GitHub repository.
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+**Enjoy using Bookmarker!** 🎉
