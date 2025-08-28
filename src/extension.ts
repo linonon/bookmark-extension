@@ -4,14 +4,14 @@ import { BookmarkTreeProvider } from './providers/bookmarkTreeProvider';
 import { BookmarkItem, CategoryItem } from './models/bookmark';
 
 export function activate(context: vscode.ExtensionContext) {
-	console.log('Bookmark Extension is now active!');
+	console.log('Bookmarker Extension is now active!');
 	
 	// Initialize services
 	const storageService = new BookmarkStorageService(context);
 	const treeProvider = new BookmarkTreeProvider(storageService);
 	
 	// Register tree data provider
-	const treeView = vscode.window.createTreeView('bookmarkExplorer', {
+	const treeView = vscode.window.createTreeView('bookmarkerExplorer', {
 		treeDataProvider: treeProvider,
 		showCollapseAll: true,
 		canSelectMany: false,
@@ -20,62 +20,62 @@ export function activate(context: vscode.ExtensionContext) {
 	
 	// Register commands
 	const commands = [
-		vscode.commands.registerCommand('bookmark-extension.addBookmark', async () => {
+		vscode.commands.registerCommand('bookmarker.addBookmark', async () => {
 			await treeProvider.addCurrentFileBookmark();
 		}),
 		
-		vscode.commands.registerCommand('bookmark-extension.addBookmarkWithLabel', async () => {
+		vscode.commands.registerCommand('bookmarker.addBookmarkWithLabel', async () => {
 			await treeProvider.addCurrentFileBookmarkWithLabel();
 		}),
 		
-		vscode.commands.registerCommand('bookmark-extension.removeBookmark', async (bookmarkItem: BookmarkItem) => {
+		vscode.commands.registerCommand('bookmarker.removeBookmark', async (bookmarkItem: BookmarkItem) => {
 			if (bookmarkItem && bookmarkItem.bookmark) {
 				await treeProvider.removeBookmark(bookmarkItem);
 			}
 		}),
 		
-		vscode.commands.registerCommand('bookmark-extension.editBookmarkLabel', async (bookmarkItem: BookmarkItem) => {
+		vscode.commands.registerCommand('bookmarker.editBookmarkLabel', async (bookmarkItem: BookmarkItem) => {
 			if (bookmarkItem && bookmarkItem.bookmark) {
 				await treeProvider.editBookmarkLabel(bookmarkItem);
 			}
 		}),
 		
-		vscode.commands.registerCommand('bookmark-extension.clearAllBookmarks', async () => {
+		vscode.commands.registerCommand('bookmarker.clearAllBookmarks', async () => {
 			await treeProvider.clearAllBookmarks();
 		}),
 		
-		vscode.commands.registerCommand('bookmark-extension.refreshBookmarks', () => {
+		vscode.commands.registerCommand('bookmarker.refreshBookmarks', () => {
 			treeProvider.refresh();
 		}),
 		
 		// Command for opening bookmarked files (used by TreeItem command)
-		vscode.commands.registerCommand('bookmark-extension.openBookmark', async (bookmark) => {
+		vscode.commands.registerCommand('bookmarker.openBookmark', async (bookmark) => {
 			await treeProvider.openBookmarkFile(bookmark);
 		}),
 		
 		// Category management commands
 		
-		vscode.commands.registerCommand('bookmark-extension.renameCategory', async (categoryItem: CategoryItem) => {
+		vscode.commands.registerCommand('bookmarker.renameCategory', async (categoryItem: CategoryItem) => {
 			if (categoryItem && categoryItem.categoryName) {
 				await treeProvider.renameCategory(categoryItem);
 			}
 		}),
 		
-		vscode.commands.registerCommand('bookmark-extension.removeCategory', async (categoryItem: CategoryItem) => {
+		vscode.commands.registerCommand('bookmarker.removeCategory', async (categoryItem: CategoryItem) => {
 			if (categoryItem && categoryItem.categoryName) {
 				await treeProvider.removeCategory(categoryItem);
 			}
 		}),
 		
-		vscode.commands.registerCommand('bookmark-extension.createNewCategory', async () => {
+		vscode.commands.registerCommand('bookmarker.createNewCategory', async () => {
 			await treeProvider.createNewCategory();
 		}),
 		
-		vscode.commands.registerCommand('bookmark-extension.searchBookmarks', async () => {
+		vscode.commands.registerCommand('bookmarker.searchBookmarks', async () => {
 			await treeProvider.searchBookmarks();
 		}),
 		
-		vscode.commands.registerCommand('bookmark-extension.addSubCategory', async (categoryItem: CategoryItem) => {
+		vscode.commands.registerCommand('bookmarker.addSubCategory', async (categoryItem: CategoryItem) => {
 			if (categoryItem && categoryItem.fullPath) {
 				await treeProvider.addSubCategory(categoryItem);
 			}

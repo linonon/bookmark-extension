@@ -1,7 +1,7 @@
 {
-  "name": "bookmark-extension",
-  "displayName": "File Bookmarks",
-  "description": "Bookmark and organize your favorite files for quick access",
+  "name": "bookmarker",
+  "displayName": "Bookmarker",
+  "description": "Bookmarker - Bookmark and organize your favorite files for quick access",
   "version": "0.0.1",
   "icon": "$(bookmark)",
   "engines": {
@@ -15,66 +15,66 @@
   "contributes": {
     "commands": [
       {
-        "command": "bookmark-extension.addBookmark",
-        "title": "Add Bookmark",
+        "command": "bookmarker.addBookmark",
+        "title": "Bookmarker: Add Bookmark",
         "icon": "$(bookmark)"
       },
       {
-        "command": "bookmark-extension.addBookmarkWithLabel",
-        "title": "Add Bookmark with Label",
+        "command": "bookmarker.addBookmarkWithLabel",
+        "title": "Bookmarker: Add Bookmark with Label",
         "icon": "$(tag)"
       },
       {
-        "command": "bookmark-extension.removeBookmark",
-        "title": "Remove Bookmark",
+        "command": "bookmarker.removeBookmark",
+        "title": "Bookmarker: Remove Bookmark",
         "icon": "$(trash)"
       },
       {
-        "command": "bookmark-extension.editBookmarkLabel",
-        "title": "Edit Label",
+        "command": "bookmarker.editBookmarkLabel",
+        "title": "Bookmarker: Edit Label",
         "icon": "$(edit)"
       },
       {
-        "command": "bookmark-extension.clearAllBookmarks",
-        "title": "Clear All Bookmarks",
+        "command": "bookmarker.clearAllBookmarks",
+        "title": "Bookmarker: Clear All Bookmarks",
         "icon": "$(clear-all)"
       },
       {
-        "command": "bookmark-extension.refreshBookmarks",
-        "title": "Refresh",
+        "command": "bookmarker.refreshBookmarks",
+        "title": "Bookmarker: Refresh",
         "icon": "$(refresh)"
       },
       {
-        "command": "bookmark-extension.renameCategory",
-        "title": "Rename Category",
+        "command": "bookmarker.renameCategory",
+        "title": "Bookmarker: Rename Category",
         "icon": "$(edit)"
       },
       {
-        "command": "bookmark-extension.removeCategory",
-        "title": "Remove Category",
+        "command": "bookmarker.removeCategory",
+        "title": "Bookmarker: Remove Category",
         "icon": "$(trash)"
       },
       {
-        "command": "bookmark-extension.createNewCategory",
-        "title": "New Category",
+        "command": "bookmarker.createNewCategory",
+        "title": "Bookmarker: New Category",
         "icon": "$(new-folder)"
       },
       {
-        "command": "bookmark-extension.searchBookmarks",
-        "title": "Search Bookmarks",
+        "command": "bookmarker.searchBookmarks",
+        "title": "Bookmarker: Search Bookmarks",
         "icon": "$(search)"
       },
       {
-        "command": "bookmark-extension.addSubCategory",
-        "title": "Add Subcategory",
+        "command": "bookmarker.addSubCategory",
+        "title": "Bookmarker: Add Subcategory",
         "icon": "$(new-folder)"
       }
     ],
     "views": {
-      "bookmarkView": [
+      "bookmarkerView": [
         {
-          "id": "bookmarkExplorer",
-          "name": "Bookmarks",
+          "id": "bookmarkerExplorer",
+          "name": "Bookmarker",
           "when": "true"
         }
       ]
@@ -82,124 +82,124 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "bookmarkView",
-          "title": "Bookmarks",
+          "id": "bookmarkerView",
+          "title": "Bookmarker",
           "icon": "$(bookmark)"
         }
       ]
     },
     "viewsWelcome": [
       {
-        "view": "bookmarkExplorer",
-        "contents": "No bookmarks found.\n[Add Bookmark](command:bookmark-extension.addBookmark)\nTo add a bookmark, open a file and use the command palette or right-click menu."
+        "view": "bookmarkerExplorer",
+        "contents": "No bookmarks found.\n[Add Bookmark](command:bookmarker.addBookmark)\nTo add a bookmark, open a file and use the command palette or right-click menu."
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "bookmark-extension.addBookmark",
-          "when": "view == bookmarkExplorer",
+          "command": "bookmarker.addBookmark",
+          "when": "view == bookmarkerExplorer",
           "group": "navigation@1"
         },
         {
-          "command": "bookmark-extension.clearAllBookmarks",
-          "when": "view == bookmarkExplorer",
+          "command": "bookmarker.clearAllBookmarks",
+          "when": "view == bookmarkerExplorer",
           "group": "navigation@2"
         },
         {
-          "command": "bookmark-extension.searchBookmarks",
-          "when": "view == bookmarkExplorer",
+          "command": "bookmarker.searchBookmarks",
+          "when": "view == bookmarkerExplorer",
           "group": "navigation@3"
         },
         {
-          "command": "bookmark-extension.refreshBookmarks",
-          "when": "view == bookmarkExplorer",
+          "command": "bookmarker.refreshBookmarks",
+          "when": "view == bookmarkerExplorer",
           "group": "navigation@4"
         }
       ],
       "view/title/context": [
         {
-          "command": "bookmark-extension.createNewCategory",
-          "when": "view == bookmarkExplorer",
+          "command": "bookmarker.createNewCategory",
+          "when": "view == bookmarkerExplorer",
           "group": "inline@1"
         }
       ],
       "view/context": [
         {
-          "command": "bookmark-extension.createNewCategory",
-          "when": "view == bookmarkExplorer",
+          "command": "bookmarker.createNewCategory",
+          "when": "view == bookmarkerExplorer",
           "group": "inline@1"
         }
       ],
       "view/item/context": [
         {
-          "command": "bookmark-extension.editBookmarkLabel",
-          "when": "view == bookmarkExplorer && viewItem == bookmark",
+          "command": "bookmarker.editBookmarkLabel",
+          "when": "view == bookmarkerExplorer && viewItem == bookmark",
           "group": "inline@1"
         },
         {
-          "command": "bookmark-extension.removeBookmark",
-          "when": "view == bookmarkExplorer && viewItem == bookmark",
+          "command": "bookmarker.removeBookmark",
+          "when": "view == bookmarkerExplorer && viewItem == bookmark",
           "group": "inline@2"
         },
         {
-          "command": "bookmark-extension.renameCategory",
-          "when": "view == bookmarkExplorer && viewItem == category",
+          "command": "bookmarker.renameCategory",
+          "when": "view == bookmarkerExplorer && viewItem == category",
           "group": "inline@1"
         },
         {
-          "command": "bookmark-extension.removeCategory",
-          "when": "view == bookmarkExplorer && viewItem == category",
+          "command": "bookmarker.removeCategory",
+          "when": "view == bookmarkerExplorer && viewItem == category",
           "group": "inline@2"
         },
         {
-          "command": "bookmark-extension.addSubCategory",
-          "when": "view == bookmarkExplorer && viewItem == category",
+          "command": "bookmarker.addSubCategory",
+          "when": "view == bookmarkerExplorer && viewItem == category",
           "group": "inline@3"
         }
       ],
       "editor/context": [
         {
-          "command": "bookmark-extension.addBookmark",
+          "command": "bookmarker.addBookmark",
           "group": "bookmarks@1",
           "when": "editorFocus"
         },
         {
-          "command": "bookmark-extension.addBookmarkWithLabel",
+          "command": "bookmarker.addBookmarkWithLabel",
           "group": "bookmarks@2",
           "when": "editorFocus"
         }
       ],
       "commandPalette": [
         {
-          "command": "bookmark-extension.removeBookmark",
+          "command": "bookmarker.removeBookmark",
           "when": "false"
         },
         {
-          "command": "bookmark-extension.renameCategory",
+          "command": "bookmarker.renameCategory",
           "when": "false"
         },
         {
-          "command": "bookmark-extension.removeCategory",
+          "command": "bookmarker.removeCategory",
           "when": "false"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "bookmark-extension.addBookmark",
+        "command": "bookmarker.addBookmark",
         "key": "ctrl+alt+b",
         "mac": "cmd+alt+b",
         "when": "editorFocus"
       },
       {
-        "command": "bookmark-extension.addBookmarkWithLabel",
+        "command": "bookmarker.addBookmarkWithLabel",
         "key": "ctrl+alt+shift+b",
         "mac": "cmd+alt+shift+b",
         "when": "editorFocus"
       },
       {
-        "command": "bookmark-extension.searchBookmarks",
+        "command": "bookmarker.searchBookmarks",
         "key": "ctrl+alt+f",
         "mac": "cmd+alt+f"
       }
