@@ -37,11 +37,16 @@ export class CategoryItem extends vscode.TreeItem {
     ) {
         super(categoryName, collapsibleState);
         
-        const totalItems = bookmarkCount + (hasChildren ? 1 : 0);
         this.tooltip = `${fullPath} (${bookmarkCount} bookmarks${hasChildren ? ', has subcategories' : ''})`;
         this.description = `${bookmarkCount} items`;
         this.contextValue = 'category';
-        this.iconPath = new vscode.ThemeIcon(hasChildren ? 'folder' : 'folder-opened');
+        
+        // Use VS Code's default folder icons
+        if (collapsibleState === vscode.TreeItemCollapsibleState.Collapsed) {
+            this.iconPath = new vscode.ThemeIcon('folder');
+        } else {
+            this.iconPath = new vscode.ThemeIcon('folder-opened');
+        }
     }
 }
 
@@ -56,8 +61,8 @@ export class BookmarkItem extends vscode.TreeItem {
         this.description = this.getRelativePath(bookmark.filePath);
         this.contextValue = 'bookmark';
         
-        // Set icon based on file type
-        this.iconPath = this.getFileIcon(bookmark.filePath);
+        // Use VS Code's file icon theme by setting resourceUri
+        this.resourceUri = vscode.Uri.file(bookmark.filePath);
         
         // Command to open file when clicked
         this.command = {
@@ -84,33 +89,5 @@ export class BookmarkItem extends vscode.TreeItem {
         }
         
         return filePath;
-    }
-    
-    private getFileIcon(filePath: string): vscode.ThemeIcon {
-        const ext = filePath.split('.').pop()?.toLowerCase();
-        
-        switch (ext) {
-            case 'ts':
-            case 'tsx':
-                return new vscode.ThemeIcon('symbol-class', new vscode.ThemeColor('symbolIcon.classForeground'));
-            case 'js':
-            case 'jsx':
-                return new vscode.ThemeIcon('symbol-method', new vscode.ThemeColor('symbolIcon.methodForeground'));
-            case 'json':
-                return new vscode.ThemeIcon('json');
-            case 'md':
-                return new vscode.ThemeIcon('markdown');
-            case 'py':
-                return new vscode.ThemeIcon('symbol-function', new vscode.ThemeColor('symbolIcon.functionForeground'));
-            case 'html':
-            case 'htm':
-                return new vscode.ThemeIcon('symbol-property', new vscode.ThemeColor('symbolIcon.propertyForeground'));
-            case 'css':
-            case 'scss':
-            case 'sass':
-                return new vscode.ThemeIcon('symbol-color', new vscode.ThemeColor('symbolIcon.colorForeground'));
-            default:
-                return new vscode.ThemeIcon('file');
-        }
     }
 }
