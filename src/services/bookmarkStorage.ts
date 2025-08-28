@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { Bookmark, BookmarkData, CategoryNode } from '../models/bookmark';
-import * as path from 'path';
 import * as fs from 'fs';
 
 export class BookmarkStorageService {

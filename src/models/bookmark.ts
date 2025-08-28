@@ -76,18 +76,8 @@ export class BookmarkItem extends vscode.TreeItem {
     }
     
     private getRelativePath(filePath: string): string {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders) {
-            return filePath;
-        }
-        
-        for (const folder of workspaceFolders) {
-            const relativePath = vscode.workspace.asRelativePath(filePath, false);
-            if (relativePath !== filePath) {
-                return relativePath;
-            }
-        }
-        
-        return filePath;
+        // Use VS Code's built-in method to get relative path
+        const relativePath = vscode.workspace.asRelativePath(filePath, false);
+        return relativePath !== filePath ? relativePath : filePath;
     }
 }
