@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { Bookmark, BookmarkData } from '../models/bookmark';
+import { Bookmark, BookmarkData, CategoryNode } from '../models/bookmark';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -107,10 +107,77 @@ export class BookmarkStorageService {
             categorizedBookmarks.get(category)!.push(bookmark);
         }
         
-        // Keep the original order from storage (user-defined order via drag-and-drop)
-        // Only sort if no custom order has been set via drag-and-drop
-        
         return categorizedBookmarks;
+    }
+    
+    buildCategoryTree(): CategoryNode {
+        const root: CategoryNode = {
+            name: 'root',
+            fullPath: '',
+            children: new Map(),
+            bookmarks: [],
+            isExpanded: true
+        };
+        
+        return root;
+    }
+    
+    async getCategoryTree(): Promise<CategoryNode> {
+        const bookmarks = await this.getBookmarks();
+        const root = this.buildCategoryTree();
+        
+        for (const bookmark of bookmarks) {
+            const categoryPath = bookmark.category || 'General';
+            this.addBookmarkToTree(root, categoryPath, bookmark);
+        }
+        
+        return root;
+    }
+    
+    private addBookmarkToTree(root: CategoryNode, categoryPath: string, bookmark: Bookmark): void {
+        const parts = categoryPath.split('/').filter(part => part.length > 0);
+        if (parts.length === 0) {
+            parts.push('General');
+        }
+        
+        let currentNode = root;
+        let currentPath = '';
+        
+        for (let i = 0; i < parts.length; i++) {
+            const part = parts[i];
+            currentPath = currentPath ? `${currentPath}/${part}` : part;
+            
+            if (!currentNode.children.has(part)) {
+                currentNode.children.set(part, {
+                    name: part,
+                    fullPath: currentPath,
+                    children: new Map(),
+                    bookmarks: [],
+                    isExpanded: true
+                });
+            }
+            
+            currentNode = currentNode.children.get(part)!;
+        }
+        
+        // Add bookmark to the leaf node
+        currentNode.bookmarks.push(bookmark);
+    }
+    
+    getAvailableCategories(node?: CategoryNode): string[] {
+        const root = node || this.buildCategoryTree();
+        const categories: string[] = [];
+        
+        const collectCategories = (currentNode: CategoryNode, pathPrefix: string = '') => {
+            for (const [name, child] of currentNode.children) {
+                const fullPath = pathPrefix ? `${pathPrefix}/${name}` : name;
+                categories.push(fullPath);
+                collectCategories(child, fullPath);
+            }
+        };
+        
+        collectCategories(root);
+        return categories.sort();
     }
     
     async getCategories(): Promise<string[]> {

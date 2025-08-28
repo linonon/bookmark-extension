@@ -10,6 +10,14 @@ export interface Bookmark {
     createdAt: Date;
 }
 
+export interface CategoryNode {
+    name: string;
+    fullPath: string;
+    children: Map<string, CategoryNode>;
+    bookmarks: Bookmark[];
+    isExpanded?: boolean;
+}
+
 export interface BookmarkGroup {
     name: string;
     bookmarks: Bookmark[];
@@ -21,15 +29,19 @@ export type BookmarkData = Bookmark[];
 export class CategoryItem extends vscode.TreeItem {
     constructor(
         public readonly categoryName: string,
+        public readonly fullPath: string,
         public readonly bookmarkCount: number,
+        public readonly hasChildren: boolean = false,
+        public readonly level: number = 0,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.Expanded
     ) {
         super(categoryName, collapsibleState);
         
-        this.tooltip = `${categoryName} (${bookmarkCount} bookmarks)`;
+        const totalItems = bookmarkCount + (hasChildren ? 1 : 0);
+        this.tooltip = `${fullPath} (${bookmarkCount} bookmarks${hasChildren ? ', has subcategories' : ''})`;
         this.description = `${bookmarkCount} items`;
         this.contextValue = 'category';
-        this.iconPath = new vscode.ThemeIcon('folder');
+        this.iconPath = new vscode.ThemeIcon(hasChildren ? 'folder' : 'folder-opened');
     }
 }
 

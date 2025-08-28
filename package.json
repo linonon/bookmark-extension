@@ -63,6 +63,11 @@
         "command": "bookmark-extension.searchBookmarks",
         "title": "Search Bookmarks",
         "icon": "$(search)"
+      },
+      {
+        "command": "bookmark-extension.addSubCategory",
+        "title": "Add Subcategory",
+        "icon": "$(new-folder)"
       }
     ],
     "views": {
@@ -112,6 +117,20 @@
           "group": "navigation@4"
         }
       ],
+      "view/title/context": [
+        {
+          "command": "bookmark-extension.createNewCategory",
+          "when": "view == bookmarkExplorer",
+          "group": "inline@1"
+        }
+      ],
+      "view/context": [
+        {
+          "command": "bookmark-extension.createNewCategory",
+          "when": "view == bookmarkExplorer",
+          "group": "inline@1"
+        }
+      ],
       "view/item/context": [
         {
           "command": "bookmark-extension.editBookmarkLabel",
@@ -132,6 +151,11 @@
           "command": "bookmark-extension.removeCategory",
           "when": "view == bookmarkExplorer && viewItem == category",
           "group": "inline@2"
+        },
+        {
+          "command": "bookmark-extension.addSubCategory",
+          "when": "view == bookmarkExplorer && viewItem == category",
+          "group": "inline@3"
         }
       ],
       "editor/context": [

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { Bookmark, BookmarkItem, CategoryItem } from '../models/bookmark';
+import { Bookmark, BookmarkItem, CategoryItem, CategoryNode } from '../models/bookmark';
 import { BookmarkStorageService } from '../services/bookmarkStorage';
 
 export class BookmarkTreeProvider implements 
@@ -25,31 +25,111 @@ export class BookmarkTreeProvider implements
     
     async getChildren(element?: BookmarkItem | CategoryItem): Promise<(BookmarkItem | CategoryItem)[]> {
         if (!element) {
-            // Root level - return category folders
-            const categorizedBookmarks = await this.storageService.getBookmarksByCategory();
-            const categories: CategoryItem[] = [];
+            // Root level - return top-level categories
+            const categoryTree = await this.storageService.getCategoryTree();
+            const result: (BookmarkItem | CategoryItem)[] = [];
             
-            for (const [categoryName, bookmarks] of categorizedBookmarks) {
-                categories.push(new CategoryItem(categoryName, bookmarks.length));
+            // Add root-level categories
+            for (const [categoryName, categoryNode] of categoryTree.children) {
+                const hasChildren = categoryNode.children.size > 0;
+                const bookmarkCount = this.getBookmarkCountInNode(categoryNode);
+                result.push(new CategoryItem(
+                    categoryName,
+                    categoryNode.fullPath,
+                    bookmarkCount,
+                    hasChildren,
+                    0
+                ));
             }
             
-            return categories.sort((a, b) => {
-                // Put 'General' category first
-                if (a.categoryName === 'General') {
+            // Add root-level bookmarks (if any)
+            for (const bookmark of categoryTree.bookmarks) {
+                result.push(new BookmarkItem(bookmark));
+            }
+            
+            return result.sort((a, b) => {
+                // Categories first, then bookmarks
+                if (a instanceof CategoryItem && b instanceof BookmarkItem) {
                     return -1;
                 }
-                if (b.categoryName === 'General') {
+                if (a instanceof BookmarkItem && b instanceof CategoryItem) {
                     return 1;
                 }
-                return a.categoryName.localeCompare(b.categoryName);
+                
+                // Sort categories: 'General' first, then alphabetically
+                if (a instanceof CategoryItem && b instanceof CategoryItem) {
+                    if (a.categoryName === 'General') {
+                        return -1;
+                    }
+                    if (b.categoryName === 'General') {
+                        return 1;
+                    }
+                    return a.categoryName.localeCompare(b.categoryName);
+                }
+                
+                // Sort bookmarks by label
+                if (a instanceof BookmarkItem && b instanceof BookmarkItem) {
+                    const aLabel = a.bookmark.label || a.bookmark.filePath;
+                    const bLabel = b.bookmark.label || b.bookmark.filePath;
+                    return aLabel.localeCompare(bLabel);
+                }
+                
+                return 0;
             });
         }
         
         if (element instanceof CategoryItem) {
-            // Return bookmarks in this category
-            const categorizedBookmarks = await this.storageService.getBookmarksByCategory();
-            const categoryBookmarks = categorizedBookmarks.get(element.categoryName) || [];
-            return categoryBookmarks.map(bookmark => new BookmarkItem(bookmark));
+            // Find the category node in the tree
+            const categoryTree = await this.storageService.getCategoryTree();
+            const categoryNode = this.findCategoryNode(categoryTree, element.fullPath);
+            
+            if (!categoryNode) {
+                return [];
+            }
+            
+            const result: (BookmarkItem | CategoryItem)[] = [];
+            
+            // Add subcategories
+            for (const [subCategoryName, subCategoryNode] of categoryNode.children) {
+                const hasChildren = subCategoryNode.children.size > 0;
+                const bookmarkCount = this.getBookmarkCountInNode(subCategoryNode);
+                result.push(new CategoryItem(
+                    subCategoryName,
+                    subCategoryNode.fullPath,
+                    bookmarkCount,
+                    hasChildren,
+                    element.level + 1
+                ));
+            }
+            
+            // Add bookmarks in this category
+            for (const bookmark of categoryNode.bookmarks) {
+                result.push(new BookmarkItem(bookmark));
+            }
+            
+            return result.sort((a, b) => {
+                // Categories first, then bookmarks
+                if (a instanceof CategoryItem && b instanceof BookmarkItem) {
+                    return -1;
+                }
+                if (a instanceof BookmarkItem && b instanceof CategoryItem) {
+                    return 1;
+                }
+                
+                // Sort categories alphabetically
+                if (a instanceof CategoryItem && b instanceof CategoryItem) {
+                    return a.categoryName.localeCompare(b.categoryName);
+                }
+                
+                // Sort bookmarks by label
+                if (a instanceof BookmarkItem && b instanceof BookmarkItem) {
+                    const aLabel = a.bookmark.label || a.bookmark.filePath;
+                    const bLabel = b.bookmark.label || b.bookmark.filePath;
+                    return aLabel.localeCompare(bLabel);
+                }
+                
+                return 0;
+            });
         }
         
         return [];
@@ -57,6 +137,36 @@ export class BookmarkTreeProvider implements
     
     private getFileName(filePath: string): string {
         return filePath.split('/').pop() || filePath;
+    }
+    
+    private findCategoryNode(root: CategoryNode, fullPath: string): CategoryNode | undefined {
+        if (fullPath === '' || fullPath === 'root') {
+            return root;
+        }
+        
+        const parts = fullPath.split('/').filter(part => part.length > 0);
+        let currentNode = root;
+        
+        for (const part of parts) {
+            const childNode = currentNode.children.get(part);
+            if (!childNode) {
+                return undefined;
+            }
+            currentNode = childNode;
+        }
+        
+        return currentNode;
+    }
+    
+    private getBookmarkCountInNode(node: CategoryNode): number {
+        let count = node.bookmarks.length;
+        
+        // Recursively count bookmarks in child nodes
+        for (const [, childNode] of node.children) {
+            count += this.getBookmarkCountInNode(childNode);
+        }
+        
+        return count;
     }
     
     async addCurrentFileBookmark(label?: string, lineNumber?: number, category?: string): Promise<void> {
@@ -75,7 +185,8 @@ export class BookmarkTreeProvider implements
         // If no category provided, ask user
         let selectedCategory = category || 'General';
         if (!category) {
-            const categories = await this.storageService.getCategories();
+            const categoryTree = await this.storageService.getCategoryTree();
+            const categories = this.storageService.getAvailableCategories(categoryTree);
             const categoryOptions = [...categories, '+ Create New Category'];
             
             const selectedOption = await vscode.window.showQuickPick(categoryOptions, {
@@ -88,8 +199,8 @@ export class BookmarkTreeProvider implements
             
             if (selectedOption === '+ Create New Category') {
                 const newCategory = await vscode.window.showInputBox({
-                    prompt: 'Enter new category name',
-                    placeHolder: 'My Category'
+                    prompt: 'Enter new category name (use / for nested categories, e.g., Frontend/React)',
+                    placeHolder: 'My Category or Parent/Child Category'
                 });
                 
                 if (!newCategory) {
@@ -138,7 +249,8 @@ export class BookmarkTreeProvider implements
         }
         
         // Step 2: Get category selection
-        const categories = await this.storageService.getCategories();
+        const categoryTree = await this.storageService.getCategoryTree();
+        const categories = this.storageService.getAvailableCategories(categoryTree);
         const categoryOptions = [...categories, '+ Create New Category'];
         
         const selectedOption = await vscode.window.showQuickPick(categoryOptions, {
@@ -152,8 +264,8 @@ export class BookmarkTreeProvider implements
         let selectedCategory = selectedOption;
         if (selectedOption === '+ Create New Category') {
             const newCategory = await vscode.window.showInputBox({
-                prompt: 'Enter new category name',
-                placeHolder: 'My Category'
+                prompt: 'Enter new category name (use / for nested categories, e.g., Frontend/React)',
+                placeHolder: 'My Category or Parent/Child Category'
             });
             
             if (!newCategory) {
@@ -225,18 +337,32 @@ export class BookmarkTreeProvider implements
     
     async renameCategory(categoryItem: CategoryItem): Promise<void> {
         const newName = await vscode.window.showInputBox({
-            prompt: 'Enter new category name',
-            value: categoryItem.categoryName,
-            placeHolder: 'Category name'
+            prompt: 'Enter new category name (use / for nested categories)',
+            value: categoryItem.fullPath,
+            placeHolder: 'Category name or Parent/Child'
         });
         
-        if (newName && newName !== categoryItem.categoryName) {
-            // Get all bookmarks in the old category and move them to new category
-            const categorizedBookmarks = await this.storageService.getBookmarksByCategory();
-            const bookmarksInCategory = categorizedBookmarks.get(categoryItem.categoryName) || [];
+        if (newName && newName !== categoryItem.fullPath) {
+            // Get all bookmarks in this category and its subcategories
+            const allBookmarks = await this.storageService.getBookmarks();
+            const bookmarksToUpdate = allBookmarks.filter(bookmark => {
+                const category = bookmark.category || 'General';
+                return category === categoryItem.fullPath || category.startsWith(categoryItem.fullPath + '/');
+            });
             
-            for (const bookmark of bookmarksInCategory) {
-                await this.storageService.moveBookmarkToCategory(bookmark.id, newName);
+            for (const bookmark of bookmarksToUpdate) {
+                const oldCategory = bookmark.category || 'General';
+                let newCategory: string;
+                
+                if (oldCategory === categoryItem.fullPath) {
+                    // Direct match - use new name
+                    newCategory = newName;
+                } else {
+                    // Subcategory - replace the prefix
+                    newCategory = oldCategory.replace(categoryItem.fullPath, newName);
+                }
+                
+                await this.storageService.moveBookmarkToCategory(bookmark.id, newCategory);
             }
             
             this.refresh();
@@ -245,26 +371,64 @@ export class BookmarkTreeProvider implements
     
     async removeCategory(categoryItem: CategoryItem): Promise<void> {
         const confirmation = await vscode.window.showWarningMessage(
-            `Remove category "${categoryItem.categoryName}"? All bookmarks will be moved to "General".`,
+            `Remove category "${categoryItem.fullPath}" and all subcategories? All bookmarks will be moved to "General".`,
             { modal: true },
             'Remove',
             'Cancel'
         );
         
         if (confirmation === 'Remove') {
-            await this.storageService.removeCategory(categoryItem.categoryName);
+            // Get all bookmarks in this category and its subcategories
+            const allBookmarks = await this.storageService.getBookmarks();
+            const bookmarksToUpdate = allBookmarks.filter(bookmark => {
+                const category = bookmark.category || 'General';
+                return category === categoryItem.fullPath || category.startsWith(categoryItem.fullPath + '/');
+            });
+            
+            // Move all bookmarks to General category
+            for (const bookmark of bookmarksToUpdate) {
+                await this.storageService.moveBookmarkToCategory(bookmark.id, 'General');
+            }
+            
             this.refresh();
         }
     }
     
     async createNewCategory(): Promise<void> {
         const categoryName = await vscode.window.showInputBox({
-            prompt: 'Enter category name',
-            placeHolder: 'My Category'
+            prompt: 'Enter category name (use / for nested categories, e.g., Frontend/React)',
+            placeHolder: 'My Category or Parent/Child Category'
         });
         
         if (categoryName) {
             // Category will be created when first bookmark is added to it
+        }
+    }
+    
+    async addSubCategory(parentCategory: CategoryItem): Promise<void> {
+        const subCategoryName = await vscode.window.showInputBox({
+            prompt: `Enter subcategory name under "${parentCategory.fullPath}"`,
+            placeHolder: 'Subcategory Name'
+        });
+        
+        if (subCategoryName) {
+            // Create the full path for the subcategory
+            const fullSubCategoryPath = `${parentCategory.fullPath}/${subCategoryName}`;
+            
+            // Create a temporary placeholder bookmark to establish the category structure
+            // This bookmark will be removed once a real bookmark is added to this category
+            const placeholderBookmark: Bookmark = {
+                id: this.storageService.generateBookmarkId(),
+                filePath: '__placeholder__' + fullSubCategoryPath,
+                label: '[Empty Category - Add bookmarks here]',
+                lineNumber: undefined,
+                workspacePath: undefined,
+                category: fullSubCategoryPath,
+                createdAt: new Date()
+            };
+            
+            await this.storageService.addBookmark(placeholderBookmark);
+            this.refresh();
         }
     }
     
@@ -368,7 +532,7 @@ export class BookmarkTreeProvider implements
         
         if (target instanceof CategoryItem) {
             // Dropped on a category folder - move to category, append at end
-            targetCategory = target.categoryName;
+            targetCategory = target.fullPath;
         } else if (target instanceof BookmarkItem) {
             // Dropped on another bookmark
             targetCategory = target.bookmark.category || 'General';

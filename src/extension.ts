@@ -73,6 +73,12 @@ export function activate(context: vscode.ExtensionContext) {
 		
 		vscode.commands.registerCommand('bookmark-extension.searchBookmarks', async () => {
 			await treeProvider.searchBookmarks();
+		}),
+		
+		vscode.commands.registerCommand('bookmark-extension.addSubCategory', async (categoryItem: CategoryItem) => {
+			if (categoryItem && categoryItem.fullPath) {
+				await treeProvider.addSubCategory(categoryItem);
+			}
 		})
 	];
 	
