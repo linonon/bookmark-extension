@@ -1,5 +1,24 @@
 import * as vscode from 'vscode';
 
+export enum CategoryColor {
+    BLUE = 'blue',
+    GREEN = 'green', 
+    RED = 'red',
+    PURPLE = 'purple',
+    ORANGE = 'orange',
+    YELLOW = 'yellow',
+    PINK = 'pink',
+    GRAY = 'gray'
+}
+
+export interface CategoryColorInfo {
+    id: CategoryColor;
+    name: string;
+    displayName: string;
+    themeColor: string;
+    hexColor: string;
+}
+
 export interface Bookmark {
     id: string;
     filePath: string;
@@ -16,7 +35,12 @@ export interface CategoryNode {
     children: Map<string, CategoryNode>;
     bookmarks: Bookmark[];
     isExpanded?: boolean;
+    color?: CategoryColor;
 }
+
+export type CategoryColorMapping = {
+    [categoryPath: string]: CategoryColor;
+};
 
 export type BookmarkData = Bookmark[];
 

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { Bookmark, BookmarkItem, CategoryItem, CategoryNode } from '../models/bookmark';
 import { BookmarkStorageService } from '../services/bookmarkStorage';
 import { GutterDecorationService } from '../services/gutterDecorationService';
+import { CategoryColorService } from '../services/categoryColorService';
 import { errorHandler } from '../utils/errorHandler';
 import { DRAG_DROP, CATEGORIES } from '../constants';
 import { InputValidator } from '../utils/validation';
@@ -18,11 +19,16 @@ export class BookmarkTreeProvider implements
     readonly dropMimeTypes = [DRAG_DROP.MIME_TYPE];
     readonly dragMimeTypes = [DRAG_DROP.MIME_TYPE, DRAG_DROP.URI_LIST_MIME_TYPE];
     private gutterDecorationService?: GutterDecorationService;
+    private categoryColorService?: CategoryColorService;
     
     constructor(private storageService: BookmarkStorageService) {}
     
     setGutterDecorationService(gutterService: GutterDecorationService): void {
         this.gutterDecorationService = gutterService;
+    }
+    
+    setCategoryColorService(colorService: CategoryColorService): void {
+        this.categoryColorService = colorService;
     }
     
     private sortTreeItems(items: (BookmarkItem | CategoryItem)[]): (BookmarkItem | CategoryItem)[] {
@@ -633,6 +639,77 @@ export class BookmarkTreeProvider implements
         }
     }
     
+    async setCategoryColor(categoryItem: CategoryItem): Promise<void> {
+        if (!this.categoryColorService) {
+            errorHandler.error('Category color service not available', new Error('CategoryColorService not set'), {
+                operation: 'setCategoryColor',
+                showToUser: true,
+                userMessage: 'Color setting service not available'
+            });
+            return;
+        }
+
+        // Check if this category can have its color changed
+        if (!this.categoryColorService.canSetColor(categoryItem.fullPath)) {
+            errorHandler.warn('Cannot set color for root category', {
+                operation: 'setCategoryColor',
+                showToUser: true,
+                userMessage: 'Cannot change color for root category'
+            });
+            return;
+        }
+
+        // Get available colors
+        const availableColors = this.categoryColorService.getAvailableColors();
+        const currentColor = this.categoryColorService.getCategoryColor(categoryItem.fullPath);
+
+        // Create quick pick items
+        const quickPickItems = availableColors.map(colorInfo => ({
+            label: colorInfo.displayName,
+            description: currentColor === colorInfo.id ? '(Current)' : '',
+            colorInfo: colorInfo
+        }));
+
+        // Add reset option
+        quickPickItems.push({
+            label: '🔄 Reset to Default',
+            description: 'Use default color',
+            colorInfo: null as any
+        });
+
+        const selectedItem = await vscode.window.showQuickPick(quickPickItems, {
+            placeHolder: `Choose color for category "${categoryItem.fullPath}"`,
+            title: 'Select Category Color'
+        });
+
+        if (selectedItem) {
+            try {
+                if (selectedItem.colorInfo) {
+                    // Set the selected color
+                    await this.categoryColorService.setCategoryColor(categoryItem.fullPath, selectedItem.colorInfo.id);
+                } else {
+                    // Reset to default
+                    await this.categoryColorService.resetCategoryColor(categoryItem.fullPath);
+                }
+
+                // Refresh gutter decorations to show color change
+                if (this.gutterDecorationService) {
+                    await this.gutterDecorationService.refreshCategoryColors();
+                }
+
+                // Refresh tree to show any visual changes
+                this.refresh();
+            } catch (error) {
+                errorHandler.error('Failed to set category color', error as Error, {
+                    operation: 'setCategoryColor',
+                    details: { categoryPath: categoryItem.fullPath },
+                    showToUser: true,
+                    userMessage: 'Failed to set category color'
+                });
+            }
+        }
+    }
+    
     async searchBookmarks(): Promise<void> {
         const searchTerm = await vscode.window.showInputBox({
             prompt: 'Search bookmarks by name or file path',
@@ -783,6 +860,21 @@ export class BookmarkTreeProvider implements
         const moveCount = await this.moveBookmarksToCategory(draggedBookmarks, targetCategory);
         await this.preserveEmptySourceCategories(sourceCategories, draggedBookmarks.map(b => b.id));
 
+        // Update gutter decorations for all affected files since categories may have changed
+        if (this.gutterDecorationService && moveCount > 0) {
+            const affectedFiles = new Set<string>();
+            for (const bookmark of draggedBookmarks) {
+                const currentCategory = InputValidator.getCategoryForComparison(bookmark.category);
+                if (currentCategory !== targetCategory) {
+                    affectedFiles.add(bookmark.filePath);
+                }
+            }
+            
+            for (const filePath of affectedFiles) {
+                await this.gutterDecorationService.updateDecorationsForFile(filePath);
+            }
+        }
+
         this.refresh();
         this.showMoveSuccessMessage(moveCount, targetCategory);
     }
@@ -812,7 +904,7 @@ export class BookmarkTreeProvider implements
     }
 
     private async handleCrossCategoryMove(
-        draggedBookmark: { id: string; category?: string },
+        draggedBookmark: { id: string; category?: string; filePath: string },
         currentCategory: string | null,
         targetCategory: string | null
     ): Promise<void> {
@@ -820,6 +912,12 @@ export class BookmarkTreeProvider implements
             await this.preserveEmptyCategoryAfterMove(currentCategory, draggedBookmark.id);
         }
         await this.storageService.moveBookmarkToCategory(draggedBookmark.id, targetCategory);
+        
+        // Update gutter decorations for the affected file since category changed
+        if (this.gutterDecorationService) {
+            await this.gutterDecorationService.updateDecorationsForFile(draggedBookmark.filePath);
+        }
+        
         this.refresh();
     }
 

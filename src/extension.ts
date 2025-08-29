@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { BookmarkStorageService } from './services/bookmarkStorage';
 import { GutterDecorationService } from './services/gutterDecorationService';
+import { CategoryColorService } from './services/categoryColorService';
 import { BookmarkTreeProvider } from './providers/bookmarkTreeProvider';
 import { Bookmark, BookmarkItem, CategoryItem } from './models/bookmark';
 import { errorHandler } from './utils/errorHandler';
@@ -9,11 +10,13 @@ export function activate(context: vscode.ExtensionContext) {
 	try {
 		// Initialize services
 		const storageService = new BookmarkStorageService(context);
-		const gutterDecorationService = new GutterDecorationService(storageService, context);
+		const categoryColorService = new CategoryColorService(context);
+		const gutterDecorationService = new GutterDecorationService(storageService, context, categoryColorService);
 		const treeProvider = new BookmarkTreeProvider(storageService);
 		
 		// Connect services
 		treeProvider.setGutterDecorationService(gutterDecorationService);
+		treeProvider.setCategoryColorService(categoryColorService);
 		
 		// Register tree data provider
 		const treeView = vscode.window.createTreeView('bookmarkerExplorer', {
@@ -59,6 +62,10 @@ export function activate(context: vscode.ExtensionContext) {
 		const handleAddSubCategory = (item: CategoryItem) => {
 			return item?.fullPath && treeProvider.addSubCategory(item);
 		};
+
+		const handleSetCategoryColor = (item: CategoryItem) => {
+			return item?.fullPath && treeProvider.setCategoryColor(item);
+		};
 	
 		// Register commands
 		const commandMap = {
@@ -76,7 +83,8 @@ export function activate(context: vscode.ExtensionContext) {
 			'bookmarker.removeCategory': handleRemoveCategory,
 			'bookmarker.createNewCategory': () => treeProvider.createNewCategory(),
 			'bookmarker.searchBookmarks': () => treeProvider.searchBookmarks(),
-			'bookmarker.addSubCategory': handleAddSubCategory
+			'bookmarker.addSubCategory': handleAddSubCategory,
+			'bookmarker.setCategoryColor': handleSetCategoryColor
 		};
 
 		const commands = Object.entries(commandMap).map(([name, handler]) =>

@@ -73,6 +73,11 @@
         "command": "bookmarker.addSubCategory",
         "title": "Bookmarker: Add Subcategory",
         "icon": "$(new-folder)"
+      },
+      {
+        "command": "bookmarker.setCategoryColor",
+        "title": "Bookmarker: Set Category Color",
+        "icon": "$(symbol-color)"
       }
     ],
     "views": {
@@ -153,6 +158,11 @@
           "command": "bookmarker.addSubCategory",
           "when": "view == bookmarkerExplorer && viewItem == category",
           "group": "inline@3"
+        },
+        {
+          "command": "bookmarker.setCategoryColor",
+          "when": "view == bookmarkerExplorer && viewItem == category",
+          "group": "inline@4"
         }
       ],
       "editor/context": [
