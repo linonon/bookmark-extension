@@ -6,7 +6,7 @@ import { STORAGE_KEYS } from '../constants';
 export class CategoryColorService {
     private static readonly CATEGORY_COLORS_STORAGE_KEY = STORAGE_KEYS.WORKSPACE_BOOKMARKS + '-colors';
     
-    // 8 種預定義顏色配置
+    // 8 predefined color configurations
     public static readonly PREDEFINED_COLORS: CategoryColorInfo[] = [
         {
             id: CategoryColor.BLUE,
@@ -66,17 +66,17 @@ export class CategoryColorService {
         }
     ];
 
-    // 默認顏色 (根目錄使用)
+    // Default color (used for root directory)
     public static readonly DEFAULT_COLOR = CategoryColor.BLUE;
 
     constructor(private context: vscode.ExtensionContext) {}
 
     /**
-     * 獲取分類的顏色設置
+     * Get category color setting
      */
     getCategoryColor(categoryPath: string | null): CategoryColor {
         if (categoryPath === null || categoryPath === '') {
-            // 根目錄書籤始終使用默認顏色
+            // Root directory bookmarks always use default color
             return CategoryColorService.DEFAULT_COLOR;
         }
 
@@ -85,7 +85,7 @@ export class CategoryColorService {
     }
 
     /**
-     * 設置分類顏色
+     * Set category color
      */
     async setCategoryColor(categoryPath: string, color: CategoryColor): Promise<void> {
         if (categoryPath === null || categoryPath === '') {
@@ -111,7 +111,7 @@ export class CategoryColorService {
     }
 
     /**
-     * 重置分類顏色為默認
+     * Reset category color to default
      */
     async resetCategoryColor(categoryPath: string): Promise<void> {
         if (categoryPath === null || categoryPath === '') {
@@ -132,28 +132,28 @@ export class CategoryColorService {
     }
 
     /**
-     * 獲取顏色資訊
+     * Get color information
      */
     getColorInfo(color: CategoryColor): CategoryColorInfo | undefined {
         return CategoryColorService.PREDEFINED_COLORS.find(c => c.id === color);
     }
 
     /**
-     * 獲取所有可用顏色
+     * Get all available colors
      */
     getAvailableColors(): CategoryColorInfo[] {
         return CategoryColorService.PREDEFINED_COLORS;
     }
 
     /**
-     * 檢查分類是否可以設置顏色
+     * Check if category can set color
      */
     canSetColor(categoryPath: string | null): boolean {
         return categoryPath !== null && categoryPath !== '';
     }
 
     /**
-     * 獲取顏色的 VS Code ThemeColor
+     * Get VS Code ThemeColor for color
      */
     getThemeColor(color: CategoryColor): vscode.ThemeColor {
         const colorInfo = this.getColorInfo(color);
@@ -161,7 +161,7 @@ export class CategoryColorService {
     }
 
     /**
-     * 獲取所有分類顏色映射
+     * Get all category color mappings
      */
     private getColorMappings(): CategoryColorMapping {
         return this.context.workspaceState.get<CategoryColorMapping>(
@@ -171,7 +171,7 @@ export class CategoryColorService {
     }
 
     /**
-     * 保存顏色映射
+     * Save color mappings
      */
     private async saveColorMappings(mappings: CategoryColorMapping): Promise<void> {
         await this.context.workspaceState.update(
@@ -181,7 +181,7 @@ export class CategoryColorService {
     }
 
     /**
-     * 清除所有顏色設置
+     * Clear all color settings
      */
     async clearAllColors(): Promise<void> {
         await this.saveColorMappings({});

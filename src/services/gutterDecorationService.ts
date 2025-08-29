@@ -25,7 +25,7 @@ export class GutterDecorationService {
             }
         });
         
-        // 初始化所有顏色的裝飾類型
+        // Initialize all color decoration types
         this.initializeDecorationTypes(context);
         
         // Listen for editor changes to update decorations
@@ -40,11 +40,11 @@ export class GutterDecorationService {
     }
     
     /**
-     * 初始化所有顏色的裝飾類型
+     * Initialize all color decoration types
      */
     private initializeDecorationTypes(context: vscode.ExtensionContext): void {
         CategoryColorService.PREDEFINED_COLORS.forEach(colorInfo => {
-            // 使用對應顏色的 SVG 文件
+            // Use corresponding color SVG file
             const iconFileName = `bookmark-${colorInfo.name}.svg`;
             const iconPath = path.join(context.extensionPath, 'resources', iconFileName);
             
@@ -99,7 +99,7 @@ export class GutterDecorationService {
                 !bookmark.filePath.startsWith(CATEGORIES.PLACEHOLDER_PREFIX)
             );
 
-            // 按顏色分組書籤
+            // Group bookmarks by color
             const decorationsByColor = new Map<CategoryColor, vscode.DecorationOptions[]>();
             
             for (const bookmark of fileBookmarks) {
@@ -107,10 +107,10 @@ export class GutterDecorationService {
                     const line = bookmark.lineNumber - 1; // Convert to 0-based indexing
                     const range = new vscode.Range(line, 0, line, 0);
                     
-                    // 獲取書籤的顏色
+                    // Get bookmark color
                     const categoryColor = this.categoryColorService.getCategoryColor(bookmark.category || null);
                     
-                    // 創建裝飾選項
+                    // Create decoration options
                     const decoration: vscode.DecorationOptions = {
                         range,
                         hoverMessage: new vscode.MarkdownString(
@@ -123,7 +123,7 @@ export class GutterDecorationService {
                         )
                     };
                     
-                    // 按顏色分組
+                    // Group by color
                     if (!decorationsByColor.has(categoryColor)) {
                         decorationsByColor.set(categoryColor, []);
                     }
@@ -131,12 +131,12 @@ export class GutterDecorationService {
                 }
             }
 
-            // 清除之前的所有裝飾
+            // Clear all previous decorations
             for (const [, decorationType] of this.decorationTypes) {
                 editor.setDecorations(decorationType, []);
             }
 
-            // 應用新的裝飾（按顏色分別應用）
+            // Apply new decorations (by color)
             for (const [color, decorations] of decorationsByColor) {
                 const decorationType = this.decorationTypes.get(color);
                 if (decorationType) {
@@ -197,7 +197,7 @@ export class GutterDecorationService {
         );
         
         if (editor) {
-            // 清除所有顏色的裝飾
+            // Clear all color decorations
             for (const decorationType of this.decorationTypes.values()) {
                 editor.setDecorations(decorationType, []);
             }
@@ -207,7 +207,7 @@ export class GutterDecorationService {
 
     clearAllDecorations(): void {
         for (const editor of vscode.window.visibleTextEditors) {
-            // 清除所有顏色的裝飾
+            // Clear all color decorations
             for (const decorationType of this.decorationTypes.values()) {
                 editor.setDecorations(decorationType, []);
             }
@@ -220,28 +220,28 @@ export class GutterDecorationService {
     }
 
     /**
-     * 刷新分類顏色（當顏色設置改變時調用）
+     * Refresh category colors (called when color settings change)
      */
     async refreshCategoryColors(): Promise<void> {
         errorHandler.info('Refreshing category colors', {
             operation: 'refreshCategoryColors'
         });
         
-        // 重新為所有可見編輯器更新裝飾
+        // Update decorations for all visible editors
         for (const editor of vscode.window.visibleTextEditors) {
             await this.updateDecorationsForEditor(editor);
         }
     }
 
     /**
-     * 獲取分類顏色服務
+     * Get category color service
      */
     getCategoryColorService(): CategoryColorService {
         return this.categoryColorService;
     }
 
     dispose(): void {
-        // 清理所有裝飾類型
+        // Clean up all decoration types
         for (const decorationType of this.decorationTypes.values()) {
             decorationType.dispose();
         }
