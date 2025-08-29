@@ -4,8 +4,6 @@ import { BookmarkTreeProvider } from './providers/bookmarkTreeProvider';
 import { BookmarkItem, CategoryItem } from './models/bookmark';
 
 export function activate(context: vscode.ExtensionContext) {
-	console.log('Bookmarker Extension is now active!');
-	
 	// Initialize services
 	const storageService = new BookmarkStorageService(context);
 	const treeProvider = new BookmarkTreeProvider(storageService);

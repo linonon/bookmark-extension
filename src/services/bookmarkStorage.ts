@@ -4,26 +4,23 @@ import * as fs from 'fs';
 
 export class BookmarkStorageService {
     private static readonly WORKSPACE_STORAGE_KEY = 'workspace-bookmarks';
+    public static readonly DEFAULT_CATEGORY = 'Uncategorized';
     
     constructor(private context: vscode.ExtensionContext) {}
     
     async getBookmarks(): Promise<BookmarkData> {
-        // Always use workspace storage now
         return this.getWorkspaceBookmarks();
     }
     
     async addBookmark(bookmark: Bookmark): Promise<void> {
-        // Always use workspace storage now
         await this.addWorkspaceBookmark(bookmark);
     }
     
     async removeBookmark(bookmarkId: string): Promise<void> {
-        // Always use workspace storage now
         await this.removeWorkspaceBookmark(bookmarkId);
     }
     
     async removeBookmarkByPath(filePath: string, lineNumber?: number): Promise<void> {
-        // Always use workspace storage now
         const bookmarks = await this.getWorkspaceBookmarks();
         const filteredBookmarks = bookmarks.filter(b => {
             if (lineNumber !== undefined) {
@@ -35,7 +32,6 @@ export class BookmarkStorageService {
     }
     
     async updateBookmark(bookmarkId: string, updates: Partial<Bookmark>): Promise<void> {
-        // Always use workspace storage now
         const bookmarks = await this.getWorkspaceBookmarks();
         const bookmarkIndex = bookmarks.findIndex(b => b.id === bookmarkId);
         
@@ -46,12 +42,10 @@ export class BookmarkStorageService {
     }
     
     async clearAllBookmarks(): Promise<void> {
-        // Always use workspace storage now
         await this.clearWorkspaceBookmarks();
     }
     
     async replaceAllBookmarks(bookmarks: BookmarkData): Promise<void> {
-        // Always use workspace storage now
         await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
     }
     
@@ -59,13 +53,19 @@ export class BookmarkStorageService {
         const validBookmarks: BookmarkData = [];
         
         for (const bookmark of bookmarks) {
+            // Skip file existence check for placeholder bookmarks
+            if (bookmark.filePath.startsWith('__placeholder__')) {
+                validBookmarks.push(bookmark);
+                continue;
+            }
+            
             try {
                 // Check if file still exists
                 await fs.promises.access(bookmark.filePath);
                 validBookmarks.push(bookmark);
             } catch (error) {
                 // File no longer exists, skip this bookmark
-                console.log(`Bookmark file no longer exists: ${bookmark.filePath}`);
+                // File no longer exists, skip this bookmark
             }
         }
         
@@ -82,7 +82,7 @@ export class BookmarkStorageService {
         const categorizedBookmarks = new Map<string, Bookmark[]>();
         
         for (const bookmark of bookmarks) {
-            const category = bookmark.category || 'General';
+            const category = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
             if (!categorizedBookmarks.has(category)) {
                 categorizedBookmarks.set(category, []);
             }
@@ -109,7 +109,7 @@ export class BookmarkStorageService {
         const root = this.buildCategoryTree();
         
         for (const bookmark of bookmarks) {
-            const categoryPath = bookmark.category || 'General';
+            const categoryPath = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
             this.addBookmarkToTree(root, categoryPath, bookmark);
         }
         
@@ -119,7 +119,7 @@ export class BookmarkStorageService {
     private addBookmarkToTree(root: CategoryNode, categoryPath: string, bookmark: Bookmark): void {
         const parts = categoryPath.split('/').filter(part => part.length > 0);
         if (parts.length === 0) {
-            parts.push('General');
+            parts.push(BookmarkStorageService.DEFAULT_CATEGORY);
         }
         
         let currentNode = root;
@@ -167,7 +167,7 @@ export class BookmarkStorageService {
         const categories = new Set<string>();
         
         for (const bookmark of bookmarks) {
-            categories.add(bookmark.category || 'General');
+            categories.add(bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY);
         }
         
         return Array.from(categories).sort();
@@ -192,7 +192,7 @@ export class BookmarkStorageService {
         const bookmarks = await this.getBookmarks();
         const updatedBookmarks = bookmarks.map(bookmark => {
             if (bookmark.category === categoryName) {
-                return { ...bookmark, category: 'General' };
+                return { ...bookmark, category: BookmarkStorageService.DEFAULT_CATEGORY };
             }
             return bookmark;
         });

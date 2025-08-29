@@ -106,35 +106,27 @@
           "group": "navigation@1"
         },
         {
-          "command": "bookmarker.clearAllBookmarks",
+          "command": "bookmarker.createNewCategory",
           "when": "view == bookmarkerExplorer",
           "group": "navigation@2"
         },
         {
-          "command": "bookmarker.searchBookmarks",
+          "command": "bookmarker.clearAllBookmarks",
           "when": "view == bookmarkerExplorer",
           "group": "navigation@3"
         },
         {
-          "command": "bookmarker.refreshBookmarks",
+          "command": "bookmarker.searchBookmarks",
           "when": "view == bookmarkerExplorer",
           "group": "navigation@4"
-        }
-      ],
-      "view/title/context": [
+        },
         {
-          "command": "bookmarker.createNewCategory",
+          "command": "bookmarker.refreshBookmarks",
           "when": "view == bookmarkerExplorer",
-          "group": "inline@1"
+          "group": "navigation@5"
         }
       ],
-      "view/context": [
-        {
-          "command": "bookmarker.createNewCategory",
-          "when": "view == bookmarkerExplorer",
-          "group": "inline@1"
-        }
-      ],
+      "view/title/context": [],
       "view/item/context": [
         {
           "command": "bookmarker.editBookmarkLabel",

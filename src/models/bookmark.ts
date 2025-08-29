@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { BookmarkStorageService } from '../services/bookmarkStorage';
 
 export interface Bookmark {
     id: string;
@@ -18,12 +19,6 @@ export interface CategoryNode {
     isExpanded?: boolean;
 }
 
-export interface BookmarkGroup {
-    name: string;
-    bookmarks: Bookmark[];
-    isExpanded?: boolean;
-}
-
 export type BookmarkData = Bookmark[];
 
 export class CategoryItem extends vscode.TreeItem {
@@ -39,7 +34,13 @@ export class CategoryItem extends vscode.TreeItem {
         
         this.tooltip = `${fullPath} (${bookmarkCount} bookmarks${hasChildren ? ', has subcategories' : ''})`;
         this.description = `${bookmarkCount} items`;
-        this.contextValue = 'category';
+        
+        // Set different context value for Uncategorized category to disable certain menu items
+        if (fullPath === BookmarkStorageService.DEFAULT_CATEGORY) {
+            this.contextValue = 'uncategorized';
+        } else {
+            this.contextValue = 'category';
+        }
         
         // Use VS Code's default folder icons
         if (collapsibleState === vscode.TreeItemCollapsibleState.Collapsed) {

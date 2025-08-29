@@ -33,18 +33,31 @@ export class BookmarkTreeProvider implements
             for (const [categoryName, categoryNode] of categoryTree.children) {
                 const hasChildren = categoryNode.children.size > 0;
                 const bookmarkCount = this.getBookmarkCountInNode(categoryNode);
-                result.push(new CategoryItem(
-                    categoryName,
-                    categoryNode.fullPath,
-                    bookmarkCount,
-                    hasChildren,
-                    0
-                ));
+                
+                // Check if category has any content (bookmarks or subcategories)
+                const hasRealContent = hasChildren || categoryNode.bookmarks.length > 0;
+                
+                if (hasRealContent) {
+                    // Special case: Hide Uncategorized category if it has 0 real bookmarks
+                    if (categoryName === BookmarkStorageService.DEFAULT_CATEGORY && bookmarkCount === 0 && !hasChildren) {
+                        continue; // Skip showing empty Uncategorized category
+                    }
+                    
+                    result.push(new CategoryItem(
+                        categoryName,
+                        categoryNode.fullPath,
+                        bookmarkCount,
+                        hasChildren,
+                        0
+                    ));
+                }
             }
             
-            // Add root-level bookmarks (if any)
+            // Add root-level bookmarks (if any), excluding placeholder bookmarks
             for (const bookmark of categoryTree.bookmarks) {
-                result.push(new BookmarkItem(bookmark));
+                if (!bookmark.filePath.startsWith('__placeholder__')) {
+                    result.push(new BookmarkItem(bookmark));
+                }
             }
             
             return result.sort((a, b) => {
@@ -56,12 +69,12 @@ export class BookmarkTreeProvider implements
                     return 1;
                 }
                 
-                // Sort categories: 'General' first, then alphabetically
+                // Sort categories: default category first, then alphabetically
                 if (a instanceof CategoryItem && b instanceof CategoryItem) {
-                    if (a.categoryName === 'General') {
+                    if (a.categoryName === BookmarkStorageService.DEFAULT_CATEGORY) {
                         return -1;
                     }
-                    if (b.categoryName === 'General') {
+                    if (b.categoryName === BookmarkStorageService.DEFAULT_CATEGORY) {
                         return 1;
                     }
                     return a.categoryName.localeCompare(b.categoryName);
@@ -93,18 +106,31 @@ export class BookmarkTreeProvider implements
             for (const [subCategoryName, subCategoryNode] of categoryNode.children) {
                 const hasChildren = subCategoryNode.children.size > 0;
                 const bookmarkCount = this.getBookmarkCountInNode(subCategoryNode);
-                result.push(new CategoryItem(
-                    subCategoryName,
-                    subCategoryNode.fullPath,
-                    bookmarkCount,
-                    hasChildren,
-                    element.level + 1
-                ));
+                
+                // Check if subcategory has any content (bookmarks or subcategories)
+                const hasRealContent = hasChildren || subCategoryNode.bookmarks.length > 0;
+                
+                if (hasRealContent) {
+                    // Special case: Hide Uncategorized category if it has 0 real bookmarks
+                    if (subCategoryNode.fullPath === BookmarkStorageService.DEFAULT_CATEGORY && bookmarkCount === 0 && !hasChildren) {
+                        continue; // Skip showing empty Uncategorized category
+                    }
+                    
+                    result.push(new CategoryItem(
+                        subCategoryName,
+                        subCategoryNode.fullPath,
+                        bookmarkCount,
+                        hasChildren,
+                        element.level + 1
+                    ));
+                }
             }
             
-            // Add bookmarks in this category
+            // Add bookmarks in this category, excluding placeholder bookmarks
             for (const bookmark of categoryNode.bookmarks) {
-                result.push(new BookmarkItem(bookmark));
+                if (!bookmark.filePath.startsWith('__placeholder__')) {
+                    result.push(new BookmarkItem(bookmark));
+                }
             }
             
             return result.sort((a, b) => {
@@ -159,7 +185,8 @@ export class BookmarkTreeProvider implements
     }
     
     private getBookmarkCountInNode(node: CategoryNode): number {
-        let count = node.bookmarks.length;
+        // Count only non-placeholder bookmarks
+        let count = node.bookmarks.filter(b => !b.filePath.startsWith('__placeholder__')).length;
         
         // Recursively count bookmarks in child nodes
         for (const [, childNode] of node.children) {
@@ -183,7 +210,7 @@ export class BookmarkTreeProvider implements
         const defaultLabel = label || `${this.getFileName(filePath)}:${currentLine}`;
         
         // If no category provided, ask user
-        let selectedCategory = category || 'General';
+        let selectedCategory = category || BookmarkStorageService.DEFAULT_CATEGORY;
         if (!category) {
             const categoryTree = await this.storageService.getCategoryTree();
             const categories = this.storageService.getAvailableCategories(categoryTree);
@@ -346,12 +373,12 @@ export class BookmarkTreeProvider implements
             // Get all bookmarks in this category and its subcategories
             const allBookmarks = await this.storageService.getBookmarks();
             const bookmarksToUpdate = allBookmarks.filter(bookmark => {
-                const category = bookmark.category || 'General';
+                const category = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
                 return category === categoryItem.fullPath || category.startsWith(categoryItem.fullPath + '/');
             });
             
             for (const bookmark of bookmarksToUpdate) {
-                const oldCategory = bookmark.category || 'General';
+                const oldCategory = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
                 let newCategory: string;
                 
                 if (oldCategory === categoryItem.fullPath) {
@@ -370,24 +397,38 @@ export class BookmarkTreeProvider implements
     }
     
     async removeCategory(categoryItem: CategoryItem): Promise<void> {
-        const confirmation = await vscode.window.showWarningMessage(
-            `Remove category "${categoryItem.fullPath}" and all subcategories? All bookmarks will be moved to "General".`,
-            { modal: true },
-            'Remove',
-            'Cancel'
+        // Get all bookmarks in this category and its subcategories
+        const allBookmarks = await this.storageService.getBookmarks();
+        const bookmarksToUpdate = allBookmarks.filter(bookmark => {
+            const category = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+            return category === categoryItem.fullPath || category.startsWith(categoryItem.fullPath + '/');
+        });
+        
+        // Check if category only contains placeholder bookmarks (empty category)
+        const realBookmarks = bookmarksToUpdate.filter(bookmark => 
+            !bookmark.filePath.startsWith('__placeholder__')
         );
         
-        if (confirmation === 'Remove') {
-            // Get all bookmarks in this category and its subcategories
-            const allBookmarks = await this.storageService.getBookmarks();
-            const bookmarksToUpdate = allBookmarks.filter(bookmark => {
-                const category = bookmark.category || 'General';
-                return category === categoryItem.fullPath || category.startsWith(categoryItem.fullPath + '/');
-            });
-            
-            // Move all bookmarks to General category
+        let shouldRemove = false;
+        
+        if (realBookmarks.length === 0) {
+            // Category is empty (only placeholders), remove without confirmation
+            shouldRemove = true;
+        } else {
+            // Category has real bookmarks, ask for confirmation
+            const confirmation = await vscode.window.showWarningMessage(
+                `Remove category "${categoryItem.fullPath}" and all subcategories? ${realBookmarks.length} bookmark(s) will be moved to "${BookmarkStorageService.DEFAULT_CATEGORY}".`,
+                { modal: true },
+                'Remove',
+                'Cancel'
+            );
+            shouldRemove = confirmation === 'Remove';
+        }
+        
+        if (shouldRemove) {
+            // Move all bookmarks to default category (including placeholders)
             for (const bookmark of bookmarksToUpdate) {
-                await this.storageService.moveBookmarkToCategory(bookmark.id, 'General');
+                await this.storageService.moveBookmarkToCategory(bookmark.id, BookmarkStorageService.DEFAULT_CATEGORY);
             }
             
             this.refresh();
@@ -397,11 +438,36 @@ export class BookmarkTreeProvider implements
     async createNewCategory(): Promise<void> {
         const categoryName = await vscode.window.showInputBox({
             prompt: 'Enter category name (use / for nested categories, e.g., Frontend/React)',
-            placeHolder: 'My Category or Parent/Child Category'
+            placeHolder: 'My Category or Parent/Child Category',
+            validateInput: (value) => {
+                if (!value.trim()) {
+                    return 'Category name cannot be empty';
+                }
+                if (value.includes('//') || value.startsWith('/') || value.endsWith('/')) {
+                    return 'Invalid category path format';
+                }
+                return null;
+            }
         });
         
-        if (categoryName) {
-            // Category will be created when first bookmark is added to it
+        if (categoryName && categoryName.trim()) {
+            const trimmedName = categoryName.trim();
+            
+            // Create a temporary placeholder bookmark to establish the category structure
+            const placeholderBookmark: Bookmark = {
+                id: this.storageService.generateBookmarkId(),
+                filePath: '__placeholder__' + trimmedName,
+                label: '[Empty Category - Add bookmarks here]',
+                lineNumber: undefined,
+                workspacePath: undefined,
+                category: trimmedName,
+                createdAt: new Date()
+            };
+            
+            await this.storageService.addBookmark(placeholderBookmark);
+            this.refresh();
+            
+            vscode.window.showInformationMessage(`Category "${trimmedName}" created successfully!`);
         }
     }
     
@@ -444,6 +510,10 @@ export class BookmarkTreeProvider implements
         
         const bookmarks = await this.storageService.getBookmarks();
         const filteredBookmarks = bookmarks.filter(bookmark => {
+            // Exclude placeholder bookmarks from search results
+            if (bookmark.filePath.startsWith('__placeholder__')) {
+                return false;
+            }
             const fileName = this.getFileName(bookmark.filePath).toLowerCase();
             const filePath = bookmark.filePath.toLowerCase();
             const label = (bookmark.label || '').toLowerCase();
@@ -463,7 +533,7 @@ export class BookmarkTreeProvider implements
         // Create quick pick items
         const quickPickItems = filteredBookmarks.map(bookmark => ({
             label: bookmark.label || this.getFileName(bookmark.filePath),
-            description: `${bookmark.category || 'General'} • Line ${bookmark.lineNumber || 1}`,
+            description: `${bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY} • Line ${bookmark.lineNumber || 1}`,
             detail: bookmark.filePath,
             bookmark: bookmark
         }));
@@ -527,7 +597,7 @@ export class BookmarkTreeProvider implements
         const draggedBookmark = draggedBookmarks[0];
         
         // Determine target category and position
-        let targetCategory = 'General';
+        let targetCategory = BookmarkStorageService.DEFAULT_CATEGORY;
         let targetPosition: number | undefined;
         
         if (target instanceof CategoryItem) {
@@ -535,8 +605,8 @@ export class BookmarkTreeProvider implements
             targetCategory = target.fullPath;
         } else if (target instanceof BookmarkItem) {
             // Dropped on another bookmark
-            targetCategory = target.bookmark.category || 'General';
-            const currentCategory = draggedBookmark.category || 'General';
+            targetCategory = target.bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+            const currentCategory = draggedBookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
             
             if (currentCategory === targetCategory) {
                 // Same category - this is a reorder operation
@@ -551,18 +621,55 @@ export class BookmarkTreeProvider implements
                 return;
             }
         } else {
-            // Dropped on empty space - use General category
-            targetCategory = 'General';
+            // Dropped on empty space - use default category
+            targetCategory = BookmarkStorageService.DEFAULT_CATEGORY;
         }
         
         // Cross-category move
-        const currentCategory = draggedBookmark.category || 'General';
+        const currentCategory = draggedBookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
         if (currentCategory !== targetCategory) {
+            // Check if source category will become empty after move
+            await this.preserveEmptyCategoryAfterMove(currentCategory, draggedBookmark.id);
+            
             await this.storageService.moveBookmarkToCategory(draggedBookmark.id, targetCategory);
             this.refresh();
         }
     }
     
+    private async preserveEmptyCategoryAfterMove(sourceCategory: string, movingBookmarkId: string): Promise<void> {
+        // Don't preserve default category - it's the default
+        if (sourceCategory === BookmarkStorageService.DEFAULT_CATEGORY) {
+            return;
+        }
+        
+        // Get all bookmarks in the source category
+        const allBookmarks = await this.storageService.getBookmarks();
+        const categoryBookmarks = allBookmarks.filter(bookmark => 
+            (bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY) === sourceCategory
+        );
+        
+        // Count real bookmarks (excluding placeholders and the one being moved)
+        const realBookmarks = categoryBookmarks.filter(bookmark => 
+            !bookmark.filePath.startsWith('__placeholder__') && 
+            bookmark.id !== movingBookmarkId
+        );
+        
+        // If no real bookmarks will remain, create placeholder to preserve category
+        if (realBookmarks.length === 0) {
+            const placeholderBookmark: Bookmark = {
+                id: this.storageService.generateBookmarkId(),
+                filePath: '__placeholder__' + sourceCategory,
+                label: '[Empty Category - Add bookmarks here]',
+                lineNumber: undefined,
+                workspacePath: undefined,
+                category: sourceCategory,
+                createdAt: new Date()
+            };
+            
+            await this.storageService.addBookmark(placeholderBookmark);
+        }
+    }
+
     private async reorderBookmarkInCategory(bookmarkId: string, categoryName: string, targetPosition: number): Promise<void> {
         const allBookmarks = await this.storageService.getBookmarks();
         const draggedBookmarkIndex = allBookmarks.findIndex(b => b.id === bookmarkId);
@@ -572,8 +679,8 @@ export class BookmarkTreeProvider implements
         }
         
         // Get all bookmarks in the target category
-        const categoryBookmarks = allBookmarks.filter(b => (b.category || 'General') === categoryName);
-        const otherBookmarks = allBookmarks.filter(b => (b.category || 'General') !== categoryName);
+        const categoryBookmarks = allBookmarks.filter(b => (b.category || BookmarkStorageService.DEFAULT_CATEGORY) === categoryName);
+        const otherBookmarks = allBookmarks.filter(b => (b.category || BookmarkStorageService.DEFAULT_CATEGORY) !== categoryName);
         
         // Remove the dragged bookmark from category list
         const draggedBookmark = categoryBookmarks.find(b => b.id === bookmarkId);
