@@ -193,4 +193,44 @@ export class InputValidator {
 
         return { isValid: true, sanitized };
     }
+
+    /**
+     * Normalizes category values for consistent handling of null/undefined/empty values
+     * 
+     * Rules:
+     * - undefined -> null (no category)
+     * - null -> null (preserve no category)
+     * - empty string '' -> null (treat as no category)
+     * - whitespace-only string -> null (treat as no category)
+     * - valid string -> return as-is
+     */
+    static normalizeCategoryValue(category: string | null | undefined): string | null {
+        // Handle undefined - convert to null for no category
+        if (category === undefined) {
+            return null;
+        }
+
+        // Handle null - preserve null for no category
+        if (category === null) {
+            return null;
+        }
+
+        // Handle string values
+        const trimmed = category.trim();
+        
+        // Empty or whitespace-only strings should be treated as no category
+        if (trimmed === '') {
+            return null;
+        }
+
+        // Return valid category string as-is
+        return trimmed;
+    }
+
+    /**
+     * Get category for comparison purposes
+     */
+    static getCategoryForComparison(category: string | null | undefined): string | null {
+        return this.normalizeCategoryValue(category);
+    }
 }

@@ -37,7 +37,7 @@ export function activate(context: vscode.ExtensionContext) {
 		const handleEditBookmarkLabel = (item: BookmarkItem, allSelected?: BookmarkItem[]) => {
 			// Only allow editing single bookmark labels
 			if (allSelected && allSelected.length > 1) {
-				vscode.window.showInformationMessage('Label editing is only available for single bookmarks. Please select one bookmark.');
+				errorHandler.showInfo('Label editing is only available for single bookmarks. Please select one bookmark.');
 				return;
 			}
 			return item?.bookmark && treeProvider.editBookmarkLabel(item);

@@ -29,14 +29,8 @@ export class BookmarkTreeProvider implements
                 return 1;
             }
             
-            // Sort categories: default category first, then alphabetically
+            // Sort categories alphabetically
             if (a instanceof CategoryItem && b instanceof CategoryItem) {
-                if (a.categoryName === BookmarkStorageService.DEFAULT_CATEGORY) {
-                    return -1;
-                }
-                if (b.categoryName === BookmarkStorageService.DEFAULT_CATEGORY) {
-                    return 1;
-                }
                 return a.categoryName.localeCompare(b.categoryName);
             }
             
@@ -73,11 +67,11 @@ export class BookmarkTreeProvider implements
     
     async getChildren(element?: BookmarkItem | CategoryItem): Promise<(BookmarkItem | CategoryItem)[]> {
         if (!element) {
-            // Root level - return top-level categories
+            // Root level - return both categories and uncategorized bookmarks
             const categoryTree = await this.storageService.getCategoryTree();
             const result: (BookmarkItem | CategoryItem)[] = [];
             
-            // Add root-level categories
+            // Add root-level categories (only if they have content)
             for (const [categoryName, categoryNode] of categoryTree.children) {
                 const hasChildren = categoryNode.children.size > 0;
                 const bookmarkCount = this.getBookmarkCountInNode(categoryNode);
@@ -86,11 +80,6 @@ export class BookmarkTreeProvider implements
                 const hasRealContent = hasChildren || categoryNode.bookmarks.length > 0;
                 
                 if (hasRealContent) {
-                    // Special case: Hide Uncategorized category if it has 0 real bookmarks
-                    if (categoryName === BookmarkStorageService.DEFAULT_CATEGORY && bookmarkCount === 0 && !hasChildren) {
-                        continue; // Skip showing empty Uncategorized category
-                    }
-                    
                     result.push(new CategoryItem(
                         categoryName,
                         categoryNode.fullPath,
@@ -101,7 +90,7 @@ export class BookmarkTreeProvider implements
                 }
             }
             
-            // Add root-level bookmarks (if any), excluding placeholder bookmarks
+            // Add root-level bookmarks (uncategorized bookmarks), excluding placeholder bookmarks
             for (const bookmark of categoryTree.bookmarks) {
                 if (!bookmark.filePath.startsWith(CATEGORIES.PLACEHOLDER_PREFIX)) {
                     result.push(new BookmarkItem(bookmark));
@@ -131,11 +120,6 @@ export class BookmarkTreeProvider implements
                 const hasRealContent = hasChildren || subCategoryNode.bookmarks.length > 0;
                 
                 if (hasRealContent) {
-                    // Special case: Hide Uncategorized category if it has 0 real bookmarks
-                    if (subCategoryNode.fullPath === BookmarkStorageService.DEFAULT_CATEGORY && bookmarkCount === 0 && !hasChildren) {
-                        continue; // Skip showing empty Uncategorized category
-                    }
-                    
                     result.push(new CategoryItem(
                         subCategoryName,
                         subCategoryNode.fullPath,
@@ -212,21 +196,23 @@ export class BookmarkTreeProvider implements
         const defaultLabel = label || `${this.getFileName(filePath)}:${currentLine}`;
         
         // If no category provided, ask user
-        let selectedCategory = category || BookmarkStorageService.DEFAULT_CATEGORY;
+        let selectedCategory: string | null = category || null;
         if (!category) {
             const categoryTree = await this.storageService.getCategoryTree();
             const categories = this.storageService.getAvailableCategories(categoryTree);
-            const categoryOptions = [...categories, '+ Create New Category'];
+            const categoryOptions = [CATEGORIES.NO_CATEGORY_DISPLAY, ...categories, '+ Create New Category'];
             
             const selectedOption = await vscode.window.showQuickPick(categoryOptions, {
-                placeHolder: 'Select category for bookmark'
+                placeHolder: 'Select category for bookmark (or choose no category)'
             });
             
             if (selectedOption === undefined) {
                 return; // User cancelled
             }
             
-            if (selectedOption === '+ Create New Category') {
+            if (selectedOption === CATEGORIES.NO_CATEGORY_DISPLAY) {
+                selectedCategory = null;
+            } else if (selectedOption === '+ Create New Category') {
                 const newCategory = await vscode.window.showInputBox({
                     prompt: 'Enter new category name (use / for nested categories, e.g., Frontend/React)',
                     placeHolder: 'My Category or Parent/Child Category'
@@ -281,18 +267,20 @@ export class BookmarkTreeProvider implements
         // Step 2: Get category selection
         const categoryTree = await this.storageService.getCategoryTree();
         const categories = this.storageService.getAvailableCategories(categoryTree);
-        const categoryOptions = [...categories, '+ Create New Category'];
+        const categoryOptions = [CATEGORIES.NO_CATEGORY_DISPLAY, ...categories, '+ Create New Category'];
         
         const selectedOption = await vscode.window.showQuickPick(categoryOptions, {
-            placeHolder: 'Select category for bookmark'
+            placeHolder: 'Select category for bookmark (or choose no category)'
         });
         
         if (selectedOption === undefined) {
             return; // User cancelled
         }
         
-        let selectedCategory = selectedOption;
-        if (selectedOption === '+ Create New Category') {
+        let selectedCategory: string | null = selectedOption;
+        if (selectedOption === CATEGORIES.NO_CATEGORY_DISPLAY) {
+            selectedCategory = null;
+        } else if (selectedOption === '+ Create New Category') {
             const newCategory = await vscode.window.showInputBox({
                 prompt: 'Enter new category name (use / for nested categories, e.g., Frontend/React)',
                 placeHolder: 'My Category or Parent/Child Category'
@@ -354,7 +342,7 @@ export class BookmarkTreeProvider implements
         }
         
         this.refresh();
-        vscode.window.showInformationMessage(`Successfully deleted ${bookmarkItems.length} bookmarks.`);
+        errorHandler.showInfo(`Successfully deleted ${bookmarkItems.length} bookmarks.`);
     }
     
     async editBookmarkLabel(bookmarkItem: BookmarkItem): Promise<void> {
@@ -464,20 +452,23 @@ export class BookmarkTreeProvider implements
             // Get all bookmarks in this category and its subcategories
             const allBookmarks = await this.storageService.getBookmarks();
             const bookmarksToUpdate = allBookmarks.filter(bookmark => {
-                const category = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
-                return category === categoryItem.fullPath || category.startsWith(categoryItem.fullPath + '/');
+                const category = bookmark.category;
+                return category === categoryItem.fullPath || (category && category.startsWith(categoryItem.fullPath + '/'));
             });
             
             for (const bookmark of bookmarksToUpdate) {
-                const oldCategory = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+                const oldCategory = bookmark.category;
                 let newCategory: string;
                 
                 if (oldCategory === categoryItem.fullPath) {
                     // Direct match - use new name
                     newCategory = newName;
-                } else {
+                } else if (oldCategory) {
                     // Subcategory - replace the prefix
                     newCategory = oldCategory.replace(categoryItem.fullPath, newName);
+                } else {
+                    // This shouldn't happen based on our filter, but handle it safely
+                    continue;
                 }
                 
                 await this.storageService.moveBookmarkToCategory(bookmark.id, newCategory);
@@ -491,8 +482,8 @@ export class BookmarkTreeProvider implements
         // Get all bookmarks in this category and its subcategories
         const allBookmarks = await this.storageService.getBookmarks();
         const bookmarksToUpdate = allBookmarks.filter(bookmark => {
-            const category = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
-            return category === categoryItem.fullPath || category.startsWith(categoryItem.fullPath + '/');
+            const category = bookmark.category;
+            return category === categoryItem.fullPath || (category && category.startsWith(categoryItem.fullPath + '/'));
         });
         
         // Check if category only contains placeholder bookmarks (empty category)
@@ -508,7 +499,7 @@ export class BookmarkTreeProvider implements
         } else {
             // Category has real bookmarks, ask for confirmation
             const confirmation = await vscode.window.showWarningMessage(
-                `Remove category "${categoryItem.fullPath}" and all subcategories? ${realBookmarks.length} bookmark(s) will be moved to "${BookmarkStorageService.DEFAULT_CATEGORY}".`,
+                `Remove category "${categoryItem.fullPath}" and all subcategories? ${realBookmarks.length} bookmark(s) will be moved to root level (no category).`,
                 { modal: true },
                 'Remove',
                 'Cancel'
@@ -517,9 +508,9 @@ export class BookmarkTreeProvider implements
         }
         
         if (shouldRemove) {
-            // Move all bookmarks to default category (including placeholders)
+            // Move all bookmarks to root level (no category) including placeholders
             for (const bookmark of bookmarksToUpdate) {
-                await this.storageService.moveBookmarkToCategory(bookmark.id, BookmarkStorageService.DEFAULT_CATEGORY);
+                await this.storageService.moveBookmarkToCategory(bookmark.id, null);
             }
             
             this.refresh();
@@ -635,7 +626,7 @@ export class BookmarkTreeProvider implements
         // Create quick pick items
         const quickPickItems = filteredBookmarks.map(bookmark => ({
             label: bookmark.label || this.getFileName(bookmark.filePath),
-            description: `${bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY} • Line ${bookmark.lineNumber || 1}`,
+            description: `${bookmark.category || 'No category'} • Line ${bookmark.lineNumber || 1}`,
             detail: bookmark.filePath,
             bookmark: bookmark
         }));
@@ -701,7 +692,7 @@ export class BookmarkTreeProvider implements
         lineNumber?: number;
         category?: string;
     }> | undefined {
-        const transferItem = dataTransfer.get('DRAG_DROP.MIME_TYPE');
+        const transferItem = dataTransfer.get(DRAG_DROP.MIME_TYPE);
         if (!transferItem) {
             return undefined;
         }
@@ -726,7 +717,7 @@ export class BookmarkTreeProvider implements
         }
 
         const targetCategory = this.determineTargetCategory(target);
-        const currentCategory = draggedBookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+        const currentCategory = InputValidator.getCategoryForComparison(draggedBookmark.category);
 
         // Handle reordering within the same category
         if (target instanceof BookmarkItem && currentCategory === targetCategory) {
@@ -754,20 +745,22 @@ export class BookmarkTreeProvider implements
         this.showMoveSuccessMessage(moveCount, targetCategory);
     }
 
-    private determineTargetCategory(target: BookmarkItem | CategoryItem | undefined): string {
+    private determineTargetCategory(target: BookmarkItem | CategoryItem | undefined): string | null {
         if (target instanceof CategoryItem) {
             return target.fullPath;
         } else if (target instanceof BookmarkItem) {
-            return target.bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+            return InputValidator.getCategoryForComparison(target.bookmark.category);
         } else {
-            return BookmarkStorageService.DEFAULT_CATEGORY;
+            // When dropped on root level (target is undefined), it should have no category (null)
+            // This allows bookmarks to be moved to root level (uncategorized)
+            return null;
         }
     }
 
     private async handleReorderOperation(
         draggedBookmark: { id: string; category?: string },
         target: BookmarkItem,
-        targetCategory: string
+        targetCategory: string | null
     ): Promise<void> {
         const categorizedBookmarks = await this.storageService.getBookmarksByCategory();
         const categoryBookmarks = categorizedBookmarks.get(targetCategory) || [];
@@ -778,22 +771,24 @@ export class BookmarkTreeProvider implements
 
     private async handleCrossCategoryMove(
         draggedBookmark: { id: string; category?: string },
-        currentCategory: string,
-        targetCategory: string
+        currentCategory: string | null,
+        targetCategory: string | null
     ): Promise<void> {
-        await this.preserveEmptyCategoryAfterMove(currentCategory, draggedBookmark.id);
+        if (currentCategory !== null) {
+            await this.preserveEmptyCategoryAfterMove(currentCategory, draggedBookmark.id);
+        }
         await this.storageService.moveBookmarkToCategory(draggedBookmark.id, targetCategory);
         this.refresh();
     }
 
     private collectSourceCategories(
         draggedBookmarks: Array<{ category?: string }>,
-        targetCategory: string
+        targetCategory: string | null
     ): Set<string> {
         const sourceCategories = new Set<string>();
         for (const bookmark of draggedBookmarks) {
-            const sourceCategory = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
-            if (sourceCategory !== targetCategory) {
+            const sourceCategory = InputValidator.getCategoryForComparison(bookmark.category);
+            if (sourceCategory !== targetCategory && sourceCategory !== null) {
                 sourceCategories.add(sourceCategory);
             }
         }
@@ -802,11 +797,11 @@ export class BookmarkTreeProvider implements
 
     private async moveBookmarksToCategory(
         draggedBookmarks: Array<{ id: string; category?: string }>,
-        targetCategory: string
+        targetCategory: string | null
     ): Promise<number> {
         let moveCount = 0;
         for (const bookmark of draggedBookmarks) {
-            const currentCategory = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+            const currentCategory = InputValidator.getCategoryForComparison(bookmark.category);
             if (currentCategory !== targetCategory) {
                 await this.storageService.moveBookmarkToCategory(bookmark.id, targetCategory);
                 moveCount++;
@@ -821,23 +816,20 @@ export class BookmarkTreeProvider implements
         }
     }
 
-    private showMoveSuccessMessage(moveCount: number, targetCategory: string): void {
+    private showMoveSuccessMessage(moveCount: number, targetCategory: string | null): void {
         if (moveCount > 0) {
-            const categoryName = targetCategory === BookmarkStorageService.DEFAULT_CATEGORY ? 'Uncategorized' : targetCategory;
-            vscode.window.showInformationMessage(`Moved ${moveCount} bookmark(s) to "${categoryName}".`);
+            const categoryName = targetCategory === null 
+                ? 'root level (no category)' 
+                : targetCategory;
+            errorHandler.showInfo(`Moved ${moveCount} bookmark(s) to "${categoryName}".`);
         }
     }
     
     private async preserveEmptyCategoryAfterMove(sourceCategory: string, movingBookmarkId: string): Promise<void> {
-        // Don't preserve default category - it's the default
-        if (sourceCategory === BookmarkStorageService.DEFAULT_CATEGORY) {
-            return;
-        }
-        
         // Get all bookmarks in the source category
         const allBookmarks = await this.storageService.getBookmarks();
         const categoryBookmarks = allBookmarks.filter(bookmark => 
-            (bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY) === sourceCategory
+            bookmark.category === sourceCategory
         );
         
         // Count real bookmarks (excluding placeholders and the one being moved)
@@ -863,15 +855,10 @@ export class BookmarkTreeProvider implements
     }
     
     private async preserveEmptyCategoryAfterMultipleMove(sourceCategory: string, movingBookmarkIds: string[]): Promise<void> {
-        // Don't preserve default category - it's the default
-        if (sourceCategory === BookmarkStorageService.DEFAULT_CATEGORY) {
-            return;
-        }
-        
         // Get all bookmarks in the source category
         const allBookmarks = await this.storageService.getBookmarks();
         const categoryBookmarks = allBookmarks.filter(bookmark => 
-            (bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY) === sourceCategory
+            bookmark.category === sourceCategory
         );
         
         // Count real bookmarks (excluding placeholders and the ones being moved)
@@ -896,7 +883,7 @@ export class BookmarkTreeProvider implements
         }
     }
 
-    private async reorderBookmarkInCategory(bookmarkId: string, categoryName: string, targetPosition: number): Promise<void> {
+    private async reorderBookmarkInCategory(bookmarkId: string, categoryName: string | null, targetPosition: number): Promise<void> {
         const allBookmarks = await this.storageService.getBookmarks();
         const draggedBookmarkIndex = allBookmarks.findIndex(b => b.id === bookmarkId);
         
@@ -905,8 +892,14 @@ export class BookmarkTreeProvider implements
         }
         
         // Get all bookmarks in the target category
-        const categoryBookmarks = allBookmarks.filter(b => (b.category || BookmarkStorageService.DEFAULT_CATEGORY) === categoryName);
-        const otherBookmarks = allBookmarks.filter(b => (b.category || BookmarkStorageService.DEFAULT_CATEGORY) !== categoryName);
+        const categoryBookmarks = allBookmarks.filter(b => {
+            const bookmarkCategory = InputValidator.getCategoryForComparison(b.category);
+            return bookmarkCategory === categoryName;
+        });
+        const otherBookmarks = allBookmarks.filter(b => {
+            const bookmarkCategory = InputValidator.getCategoryForComparison(b.category);
+            return bookmarkCategory !== categoryName;
+        });
         
         // Remove the dragged bookmark from category list
         const draggedBookmark = categoryBookmarks.find(b => b.id === bookmarkId);

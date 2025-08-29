@@ -4,10 +4,10 @@ import * as fs from 'fs';
 import { errorHandler } from '../utils/errorHandler';
 import { STORAGE_KEYS, CATEGORIES } from '../constants';
 import { fileExistenceCache, categoryTreeCache } from '../utils/cache';
+import { InputValidator } from '../utils/validation';
 
 export class BookmarkStorageService {
     private static readonly WORKSPACE_STORAGE_KEY = STORAGE_KEYS.WORKSPACE_BOOKMARKS;
-    public static readonly DEFAULT_CATEGORY = CATEGORIES.DEFAULT;
     
     constructor(private context: vscode.ExtensionContext) {}
     
@@ -177,12 +177,12 @@ export class BookmarkStorageService {
         return validBookmarks;
     }
     
-    async getBookmarksByCategory(): Promise<Map<string, Bookmark[]>> {
+    async getBookmarksByCategory(): Promise<Map<string | null, Bookmark[]>> {
         const bookmarks = await this.getBookmarks();
-        const categorizedBookmarks = new Map<string, Bookmark[]>();
+        const categorizedBookmarks = new Map<string | null, Bookmark[]>();
         
         for (const bookmark of bookmarks) {
-            const category = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+            const category = InputValidator.getCategoryForComparison(bookmark.category);
             if (!categorizedBookmarks.has(category)) {
                 categorizedBookmarks.set(category, []);
             }
@@ -209,8 +209,12 @@ export class BookmarkStorageService {
         const root = this.buildCategoryTree();
         
         for (const bookmark of bookmarks) {
-            const categoryPath = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
-            this.addBookmarkToTree(root, categoryPath, bookmark);
+            if (bookmark.category === null || bookmark.category === undefined) {
+                // Add uncategorized bookmarks directly to root
+                root.bookmarks.push(bookmark);
+            } else {
+                this.addBookmarkToTree(root, bookmark.category, bookmark);
+            }
         }
         
         return root;
@@ -219,7 +223,9 @@ export class BookmarkStorageService {
     private addBookmarkToTree(root: CategoryNode, categoryPath: string, bookmark: Bookmark): void {
         const parts = categoryPath.split('/').filter(part => part.length > 0);
         if (parts.length === 0) {
-            parts.push(BookmarkStorageService.DEFAULT_CATEGORY);
+            // If categoryPath is empty, add directly to root
+            root.bookmarks.push(bookmark);
+            return;
         }
         
         let currentNode = root;
@@ -273,7 +279,9 @@ export class BookmarkStorageService {
         const categories = new Set<string>();
         
         for (const bookmark of bookmarks) {
-            categories.add(bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY);
+            if (bookmark.category) {
+                categories.add(bookmark.category);
+            }
         }
         
         return Array.from(categories).sort();
@@ -284,7 +292,7 @@ export class BookmarkStorageService {
         await this.addBookmark(bookmark);
     }
     
-    async moveBookmarkToCategory(bookmarkId: string, newCategory: string): Promise<void> {
+    async moveBookmarkToCategory(bookmarkId: string, newCategory: string | null): Promise<void> {
         const bookmarks = await this.getBookmarks();
         const bookmarkIndex = bookmarks.findIndex(b => b.id === bookmarkId);
         
@@ -293,6 +301,7 @@ export class BookmarkStorageService {
             if (bookmark) {
                 bookmark.category = newCategory;
                 await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
+                this.clearCaches();
             }
         }
     }
@@ -301,7 +310,7 @@ export class BookmarkStorageService {
         const bookmarks = await this.getBookmarks();
         const updatedBookmarks = bookmarks.map(bookmark => {
             if (bookmark.category === categoryName) {
-                return { ...bookmark, category: BookmarkStorageService.DEFAULT_CATEGORY };
+                return { ...bookmark, category: null };
             }
             return bookmark;
         });

@@ -56,6 +56,16 @@ export class ErrorHandler {
     }
 
     private showUserNotification(level: LogLevel, message: string): void {
+        const config = vscode.workspace.getConfiguration('bookmarker');
+        const notificationLevel = config.get<string>('notifications.level', 'errors-warnings');
+        
+        // Check if we should show this notification based on user preference
+        const shouldShow = this.shouldShowNotification(level, notificationLevel);
+        
+        if (!shouldShow) {
+            return;
+        }
+        
         switch (level) {
             case LogLevel.ERROR:
                 vscode.window.showErrorMessage(message);
@@ -69,6 +79,33 @@ export class ErrorHandler {
             default:
                 // Don't show DEBUG messages to users
                 break;
+        }
+    }
+    
+    private shouldShowNotification(level: LogLevel, notificationLevel: string): boolean {
+        switch (notificationLevel) {
+            case 'all':
+                return level !== LogLevel.DEBUG;
+            case 'errors-warnings':
+                return level === LogLevel.ERROR || level === LogLevel.WARN;
+            case 'errors-only':
+                return level === LogLevel.ERROR;
+            case 'none':
+                return false;
+            default:
+                return level === LogLevel.ERROR || level === LogLevel.WARN;
+        }
+    }
+    
+    /**
+     * Show information message respecting user configuration
+     */
+    showInfo(message: string): void {
+        const config = vscode.workspace.getConfiguration('bookmarker');
+        const notificationLevel = config.get<string>('notifications.level', 'errors-warnings');
+        
+        if (this.shouldShowNotification(LogLevel.INFO, notificationLevel)) {
+            vscode.window.showInformationMessage(message);
         }
     }
 

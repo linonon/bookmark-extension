@@ -5,9 +5,10 @@ export const STORAGE_KEYS = {
 
 // Category and organization constants
 export const CATEGORIES = {
-    DEFAULT: 'Uncategorized',
     PLACEHOLDER_PREFIX: '__placeholder__',
-    EMPTY_MESSAGE: '[Empty Category - Add bookmarks here]'
+    EMPTY_MESSAGE: '[Empty Category - Add bookmarks here]',
+    NO_CATEGORY: null as null,
+    NO_CATEGORY_DISPLAY: '[No Category]'
 } as const;
 
 // Drag and drop constants
