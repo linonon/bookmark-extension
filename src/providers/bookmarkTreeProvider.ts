@@ -302,6 +302,36 @@ export class BookmarkTreeProvider implements
         this.refresh();
     }
     
+    async removeMultipleBookmarks(bookmarkItems: BookmarkItem[]): Promise<void> {
+        if (bookmarkItems.length === 0) {
+            return;
+        }
+        
+        if (bookmarkItems.length === 1) {
+            return this.removeBookmark(bookmarkItems[0]);
+        }
+        
+        // Ask for confirmation for multiple bookmarks
+        const confirmation = await vscode.window.showWarningMessage(
+            `Are you sure you want to delete ${bookmarkItems.length} bookmarks?`,
+            { modal: true },
+            'Delete',
+            'Cancel'
+        );
+        
+        if (confirmation !== 'Delete') {
+            return;
+        }
+        
+        // Remove all bookmarks
+        for (const bookmarkItem of bookmarkItems) {
+            await this.storageService.removeBookmark(bookmarkItem.bookmark.id);
+        }
+        
+        this.refresh();
+        vscode.window.showInformationMessage(`Successfully deleted ${bookmarkItems.length} bookmarks.`);
+    }
+    
     async editBookmarkLabel(bookmarkItem: BookmarkItem): Promise<void> {
         const newLabel = await vscode.window.showInputBox({
             prompt: 'Enter new bookmark label',
@@ -570,51 +600,94 @@ export class BookmarkTreeProvider implements
             return;
         }
         
-        // Only handle single bookmark drag for reordering
-        if (draggedBookmarks.length > 1) {
-            vscode.window.showWarningMessage('Multiple bookmark reordering is not supported');
-            return;
-        }
-        
-        const draggedBookmark = draggedBookmarks[0];
-        
-        // Determine target category and position
-        let targetCategory = BookmarkStorageService.DEFAULT_CATEGORY;
-        let targetPosition: number | undefined;
-        
-        if (target instanceof CategoryItem) {
-            // Dropped on a category folder - move to category, append at end
-            targetCategory = target.fullPath;
-        } else if (target instanceof BookmarkItem) {
-            // Dropped on another bookmark
-            targetCategory = target.bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
-            const currentCategory = draggedBookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+        // Handle both single and multiple bookmark operations
+        if (draggedBookmarks.length === 1) {
+            // Single bookmark - use existing logic with potential for reordering
+            const draggedBookmark = draggedBookmarks[0];
             
-            if (currentCategory === targetCategory) {
-                // Same category - this is a reorder operation
-                const categorizedBookmarks = await this.storageService.getBookmarksByCategory();
-                const categoryBookmarks = categorizedBookmarks.get(targetCategory) || [];
+            // Determine target category and position
+            let targetCategory = BookmarkStorageService.DEFAULT_CATEGORY;
+            let targetPosition: number | undefined;
+            
+            if (target instanceof CategoryItem) {
+                // Dropped on a category folder - move to category, append at end
+                targetCategory = target.fullPath;
+            } else if (target instanceof BookmarkItem) {
+                // Dropped on another bookmark
+                targetCategory = target.bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+                const currentCategory = draggedBookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
                 
-                // Find target position
-                targetPosition = categoryBookmarks.findIndex(b => b.id === target.bookmark.id);
+                if (currentCategory === targetCategory) {
+                    // Same category - this is a reorder operation
+                    const categorizedBookmarks = await this.storageService.getBookmarksByCategory();
+                    const categoryBookmarks = categorizedBookmarks.get(targetCategory) || [];
+                    
+                    // Find target position
+                    targetPosition = categoryBookmarks.findIndex(b => b.id === target.bookmark.id);
+                    
+                    // Reorder within category
+                    await this.reorderBookmarkInCategory(draggedBookmark.id, targetCategory, targetPosition);
+                    return;
+                }
+            } else {
+                // Dropped on empty space - use default category
+                targetCategory = BookmarkStorageService.DEFAULT_CATEGORY;
+            }
+            
+            // Cross-category move
+            const currentCategory = draggedBookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+            if (currentCategory !== targetCategory) {
+                // Check if source category will become empty after move
+                await this.preserveEmptyCategoryAfterMove(currentCategory, draggedBookmark.id);
                 
-                // Reorder within category
-                await this.reorderBookmarkInCategory(draggedBookmark.id, targetCategory, targetPosition);
-                return;
+                await this.storageService.moveBookmarkToCategory(draggedBookmark.id, targetCategory);
+                this.refresh();
             }
         } else {
-            // Dropped on empty space - use default category
-            targetCategory = BookmarkStorageService.DEFAULT_CATEGORY;
-        }
-        
-        // Cross-category move
-        const currentCategory = draggedBookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
-        if (currentCategory !== targetCategory) {
-            // Check if source category will become empty after move
-            await this.preserveEmptyCategoryAfterMove(currentCategory, draggedBookmark.id);
+            // Multiple bookmarks - batch move only (no reordering)
+            let targetCategory = BookmarkStorageService.DEFAULT_CATEGORY;
             
-            await this.storageService.moveBookmarkToCategory(draggedBookmark.id, targetCategory);
+            if (target instanceof CategoryItem) {
+                // Dropped on a category folder - move all to this category
+                targetCategory = target.fullPath;
+            } else if (target instanceof BookmarkItem) {
+                // Dropped on another bookmark - move all to that bookmark's category
+                targetCategory = target.bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+            } else {
+                // Dropped on empty space - move all to default category
+                targetCategory = BookmarkStorageService.DEFAULT_CATEGORY;
+            }
+            
+            // Collect source categories that might become empty
+            const sourceCategories = new Set<string>();
+            for (const bookmark of draggedBookmarks) {
+                const sourceCategory = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+                if (sourceCategory !== targetCategory) {
+                    sourceCategories.add(sourceCategory);
+                }
+            }
+            
+            // Move all bookmarks to target category
+            let moveCount = 0;
+            for (const bookmark of draggedBookmarks) {
+                const currentCategory = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+                if (currentCategory !== targetCategory) {
+                    await this.storageService.moveBookmarkToCategory(bookmark.id, targetCategory);
+                    moveCount++;
+                }
+            }
+            
+            // Preserve empty categories by adding placeholders
+            for (const sourceCategory of sourceCategories) {
+                await this.preserveEmptyCategoryAfterMultipleMove(sourceCategory, draggedBookmarks.map(b => b.id));
+            }
+            
             this.refresh();
+            
+            if (moveCount > 0) {
+                const categoryName = targetCategory === BookmarkStorageService.DEFAULT_CATEGORY ? 'Uncategorized' : targetCategory;
+                vscode.window.showInformationMessage(`Moved ${moveCount} bookmark(s) to "${categoryName}".`);
+            }
         }
     }
     
@@ -634,6 +707,40 @@ export class BookmarkTreeProvider implements
         const realBookmarks = categoryBookmarks.filter(bookmark => 
             !bookmark.filePath.startsWith('__placeholder__') && 
             bookmark.id !== movingBookmarkId
+        );
+        
+        // If no real bookmarks will remain, create placeholder to preserve category
+        if (realBookmarks.length === 0) {
+            const placeholderBookmark: Bookmark = {
+                id: this.storageService.generateBookmarkId(),
+                filePath: '__placeholder__' + sourceCategory,
+                label: '[Empty Category - Add bookmarks here]',
+                lineNumber: undefined,
+                workspacePath: undefined,
+                category: sourceCategory,
+                createdAt: new Date()
+            };
+            
+            await this.storageService.addBookmark(placeholderBookmark);
+        }
+    }
+    
+    private async preserveEmptyCategoryAfterMultipleMove(sourceCategory: string, movingBookmarkIds: string[]): Promise<void> {
+        // Don't preserve default category - it's the default
+        if (sourceCategory === BookmarkStorageService.DEFAULT_CATEGORY) {
+            return;
+        }
+        
+        // Get all bookmarks in the source category
+        const allBookmarks = await this.storageService.getBookmarks();
+        const categoryBookmarks = allBookmarks.filter(bookmark => 
+            (bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY) === sourceCategory
+        );
+        
+        // Count real bookmarks (excluding placeholders and the ones being moved)
+        const realBookmarks = categoryBookmarks.filter(bookmark => 
+            !bookmark.filePath.startsWith('__placeholder__') && 
+            !movingBookmarkIds.includes(bookmark.id)
         );
         
         // If no real bookmarks will remain, create placeholder to preserve category

@@ -12,7 +12,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const treeView = vscode.window.createTreeView('bookmarkerExplorer', {
 		treeDataProvider: treeProvider,
 		showCollapseAll: true,
-		canSelectMany: false,
+		canSelectMany: true,
 		dragAndDropController: treeProvider
 	});
 	
@@ -20,8 +20,26 @@ export function activate(context: vscode.ExtensionContext) {
 	const commandMap = {
 		'bookmarker.addBookmark': () => treeProvider.addCurrentFileBookmark(),
 		'bookmarker.addBookmarkWithLabel': () => treeProvider.addCurrentFileBookmarkWithLabel(),
-		'bookmarker.removeBookmark': (item: BookmarkItem) => item?.bookmark && treeProvider.removeBookmark(item),
-		'bookmarker.editBookmarkLabel': (item: BookmarkItem) => item?.bookmark && treeProvider.editBookmarkLabel(item),
+		'bookmarker.removeBookmark': (item: BookmarkItem, allSelected?: BookmarkItem[]) => {
+			if (allSelected && allSelected.length > 1) {
+				// Multi-selection: remove all selected bookmarks
+				const bookmarkItems = allSelected.filter(selected => selected instanceof BookmarkItem && selected.bookmark);
+				if (bookmarkItems.length > 0) {
+					return treeProvider.removeMultipleBookmarks(bookmarkItems);
+				}
+			} else if (item?.bookmark) {
+				// Single selection: remove single bookmark
+				return treeProvider.removeBookmark(item);
+			}
+		},
+		'bookmarker.editBookmarkLabel': (item: BookmarkItem, allSelected?: BookmarkItem[]) => {
+			// Only allow editing single bookmark labels
+			if (allSelected && allSelected.length > 1) {
+				vscode.window.showInformationMessage('Label editing is only available for single bookmarks. Please select one bookmark.');
+				return;
+			}
+			return item?.bookmark && treeProvider.editBookmarkLabel(item);
+		},
 		'bookmarker.clearAllBookmarks': () => treeProvider.clearAllBookmarks(),
 		'bookmarker.refreshBookmarks': () => treeProvider.refresh(),
 		'bookmarker.openBookmark': (bookmark: any) => treeProvider.openBookmarkFile(bookmark),
