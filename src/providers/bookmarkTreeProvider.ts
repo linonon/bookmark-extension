@@ -290,7 +290,7 @@ export class BookmarkTreeProvider implements
             filePath: filePath,
             label: defaultLabel,
             lineNumber: currentLine,
-            workspacePath: workspaceFolder?.uri.fsPath ?? undefined,
+            ...(workspaceFolder?.uri.fsPath && { workspacePath: workspaceFolder.uri.fsPath }),
             category: selectedCategory,
             createdAt: new Date(),
             
@@ -404,7 +404,7 @@ export class BookmarkTreeProvider implements
             filePath: filePath,
             label: label,
             lineNumber: currentLine,
-            workspacePath: workspaceFolder?.uri.fsPath ?? undefined,
+            ...(workspaceFolder?.uri.fsPath && { workspacePath: workspaceFolder.uri.fsPath }),
             category: selectedCategory,
             createdAt: new Date(),
             
@@ -680,8 +680,6 @@ export class BookmarkTreeProvider implements
                     id: this.storageService.generateBookmarkId(),
                     filePath: CATEGORIES.PLACEHOLDER_PREFIX + validation.sanitized,
                     label: CATEGORIES.EMPTY_MESSAGE,
-                    lineNumber: undefined,
-                    workspacePath: undefined,
                     category: validation.sanitized,
                     createdAt: new Date()
                 };
@@ -722,8 +720,6 @@ export class BookmarkTreeProvider implements
                 id: this.storageService.generateBookmarkId(),
                 filePath: CATEGORIES.PLACEHOLDER_PREFIX + fullSubCategoryPath,
                 label: CATEGORIES.EMPTY_MESSAGE,
-                lineNumber: undefined,
-                workspacePath: undefined,
                 category: fullSubCategoryPath,
                 createdAt: new Date()
             };
@@ -1078,8 +1074,6 @@ export class BookmarkTreeProvider implements
                 id: this.storageService.generateBookmarkId(),
                 filePath: CATEGORIES.PLACEHOLDER_PREFIX + sourceCategory,
                 label: CATEGORIES.EMPTY_MESSAGE,
-                lineNumber: undefined,
-                workspacePath: undefined,
                 category: sourceCategory,
                 createdAt: new Date()
             };
@@ -1107,8 +1101,6 @@ export class BookmarkTreeProvider implements
                 id: this.storageService.generateBookmarkId(),
                 filePath: CATEGORIES.PLACEHOLDER_PREFIX + sourceCategory,
                 label: CATEGORIES.EMPTY_MESSAGE,
-                lineNumber: undefined,
-                workspacePath: undefined,
                 category: sourceCategory,
                 createdAt: new Date()
             };

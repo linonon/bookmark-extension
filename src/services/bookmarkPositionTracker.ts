@@ -231,9 +231,11 @@ export class BookmarkPositionTracker implements vscode.Disposable {
             try {
                 // Apply all pending updates for this file
                 for (const bookmark of bookmarks) {
-                    await this.storageService.updateBookmark(bookmark.id, {
-                        lineNumber: bookmark.lineNumber
-                    });
+                    const update: Partial<Bookmark> = {};
+                    if (bookmark.lineNumber !== undefined) {
+                        update.lineNumber = bookmark.lineNumber;
+                    }
+                    await this.storageService.updateBookmark(bookmark.id, update);
                 }
 
                 // Apply removals
