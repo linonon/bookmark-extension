@@ -16,41 +16,58 @@ export function activate(context: vscode.ExtensionContext) {
 		canSelectMany: true,
 		dragAndDropController: treeProvider
 	});
+
+	// Command handler functions
+	const handleRemoveBookmark = (item: BookmarkItem, allSelected?: BookmarkItem[]) => {
+		if (allSelected && allSelected.length > 1) {
+			// Multi-selection: remove all selected bookmarks
+			const bookmarkItems = allSelected.filter(selected => selected instanceof BookmarkItem && selected.bookmark);
+			if (bookmarkItems.length > 0) {
+				return treeProvider.removeMultipleBookmarks(bookmarkItems);
+			}
+		} else if (item?.bookmark) {
+			// Single selection: remove single bookmark
+			return treeProvider.removeBookmark(item);
+		}
+		// Return undefined for cases where no action is taken
+		return undefined;
+	};
+
+	const handleEditBookmarkLabel = (item: BookmarkItem, allSelected?: BookmarkItem[]) => {
+		// Only allow editing single bookmark labels
+		if (allSelected && allSelected.length > 1) {
+			vscode.window.showInformationMessage('Label editing is only available for single bookmarks. Please select one bookmark.');
+			return;
+		}
+		return item?.bookmark && treeProvider.editBookmarkLabel(item);
+	};
+
+	const handleRenameCategory = (item: CategoryItem) => {
+		return item?.categoryName && treeProvider.renameCategory(item);
+	};
+
+	const handleRemoveCategory = (item: CategoryItem) => {
+		return item?.categoryName && treeProvider.removeCategory(item);
+	};
+
+	const handleAddSubCategory = (item: CategoryItem) => {
+		return item?.fullPath && treeProvider.addSubCategory(item);
+	};
 	
 	// Register commands
 	const commandMap = {
 		'bookmarker.addBookmark': () => treeProvider.addCurrentFileBookmark(),
 		'bookmarker.addBookmarkWithLabel': () => treeProvider.addCurrentFileBookmarkWithLabel(),
-		'bookmarker.removeBookmark': (item: BookmarkItem, allSelected?: BookmarkItem[]) => {
-			if (allSelected && allSelected.length > 1) {
-				// Multi-selection: remove all selected bookmarks
-				const bookmarkItems = allSelected.filter(selected => selected instanceof BookmarkItem && selected.bookmark);
-				if (bookmarkItems.length > 0) {
-					return treeProvider.removeMultipleBookmarks(bookmarkItems);
-				}
-			} else if (item?.bookmark) {
-				// Single selection: remove single bookmark
-				return treeProvider.removeBookmark(item);
-			}
-			// Return undefined for cases where no action is taken
-			return undefined;
-		},
-		'bookmarker.editBookmarkLabel': (item: BookmarkItem, allSelected?: BookmarkItem[]) => {
-			// Only allow editing single bookmark labels
-			if (allSelected && allSelected.length > 1) {
-				vscode.window.showInformationMessage('Label editing is only available for single bookmarks. Please select one bookmark.');
-				return;
-			}
-			return item?.bookmark && treeProvider.editBookmarkLabel(item);
-		},
+		'bookmarker.removeBookmark': handleRemoveBookmark,
+		'bookmarker.editBookmarkLabel': handleEditBookmarkLabel,
 		'bookmarker.clearAllBookmarks': () => treeProvider.clearAllBookmarks(),
 		'bookmarker.refreshBookmarks': () => treeProvider.refresh(),
 		'bookmarker.openBookmark': (bookmark: Bookmark) => treeProvider.openBookmarkFile(bookmark),
-		'bookmarker.renameCategory': (item: CategoryItem) => item?.categoryName && treeProvider.renameCategory(item),
-		'bookmarker.removeCategory': (item: CategoryItem) => item?.categoryName && treeProvider.removeCategory(item),
+		'bookmarker.renameCategory': handleRenameCategory,
+		'bookmarker.removeCategory': handleRemoveCategory,
 		'bookmarker.createNewCategory': () => treeProvider.createNewCategory(),
 		'bookmarker.searchBookmarks': () => treeProvider.searchBookmarks(),
-		'bookmarker.addSubCategory': (item: CategoryItem) => item?.fullPath && treeProvider.addSubCategory(item)
+		'bookmarker.addSubCategory': handleAddSubCategory
 	};
 
 	const commands = Object.entries(commandMap).map(([name, handler]) =>

@@ -15,7 +15,7 @@ export class BookmarkTreeProvider implements
     
     // Drag and drop MIME types
     readonly dropMimeTypes = [DRAG_DROP.MIME_TYPE];
-    readonly dragMimeTypes = [DRAG_DROP.MIME_TYPE];
+    readonly dragMimeTypes = [DRAG_DROP.MIME_TYPE, DRAG_DROP.URI_LIST_MIME_TYPE];
     
     constructor(private storageService: BookmarkStorageService) {}
     
@@ -659,7 +659,7 @@ export class BookmarkTreeProvider implements
             return;
         }
         
-        // Store the bookmark data for transfer
+        // Store the bookmark data for tree-internal drag and drop
         const draggedData = bookmarkItems.map(item => ({
             id: item.bookmark.id,
             filePath: item.bookmark.filePath,
@@ -668,7 +668,14 @@ export class BookmarkTreeProvider implements
             category: item.bookmark.category
         }));
         
-        treeDataTransfer.set('DRAG_DROP.MIME_TYPE', new vscode.DataTransferItem(draggedData));
+        treeDataTransfer.set(DRAG_DROP.MIME_TYPE, new vscode.DataTransferItem(draggedData));
+        
+        // Add URI list for external drops (like dropping to editor)
+        const uriList = bookmarkItems
+            .map(item => vscode.Uri.file(item.bookmark.filePath).toString())
+            .join('\n');
+        
+        treeDataTransfer.set(DRAG_DROP.URI_LIST_MIME_TYPE, new vscode.DataTransferItem(uriList));
     }
     
     async handleDrop(target: BookmarkItem | CategoryItem | undefined, dataTransfer: vscode.DataTransfer, _token: vscode.CancellationToken): Promise<void> {

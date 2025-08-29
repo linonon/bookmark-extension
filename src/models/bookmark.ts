@@ -59,7 +59,7 @@ export class BookmarkItem extends vscode.TreeItem {
         super(bookmark.label || bookmark.filePath, collapsibleState);
         
         this.tooltip = `${bookmark.filePath}${bookmark.lineNumber ? `:${bookmark.lineNumber}` : ''}`;
-        this.description = this.getRelativePath(bookmark.filePath);
+        this.description = this.getRelativePathWithLine(bookmark.filePath, bookmark.lineNumber);
         this.contextValue = 'bookmark';
         
         // Use VS Code's file icon theme by setting resourceUri
@@ -76,9 +76,12 @@ export class BookmarkItem extends vscode.TreeItem {
         };
     }
     
-    private getRelativePath(filePath: string): string {
+    private getRelativePathWithLine(filePath: string, lineNumber?: number): string {
         // Use VS Code's built-in method to get relative path
         const relativePath = vscode.workspace.asRelativePath(filePath, false);
-        return relativePath !== filePath ? relativePath : filePath;
+        const basePath = relativePath !== filePath ? relativePath : filePath;
+        
+        // Append line number if available
+        return lineNumber ? `${basePath}:${lineNumber}` : basePath;
     }
 }

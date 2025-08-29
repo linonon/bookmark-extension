@@ -12,7 +12,8 @@ export const CATEGORIES = {
 
 // Drag and drop constants
 export const DRAG_DROP = {
-    MIME_TYPE: 'application/vnd.code.tree.bookmarkExplorer'
+    MIME_TYPE: 'application/vnd.code.tree.bookmarkExplorer',
+    URI_LIST_MIME_TYPE: 'text/uri-list'
 } as const;
 
 
