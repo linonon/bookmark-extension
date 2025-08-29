@@ -189,6 +189,22 @@
         {
           "command": "bookmarker.removeCategory",
           "when": "false"
+        },
+        {
+          "command": "bookmarker.editBookmarkLabel",
+          "when": "false"
+        },
+        {
+          "command": "bookmarker.searchBookmarks",
+          "when": "false"
+        },
+        {
+          "command": "bookmarker.addSubCategory",
+          "when": "false"
+        },
+        {
+          "command": "bookmarker.setCategoryColor",
+          "when": "false"
         }
       ]
     },
@@ -204,11 +220,6 @@
         "key": "ctrl+alt+shift+b",
         "mac": "cmd+alt+shift+b",
         "when": "editorFocus"
-      },
-      {
-        "command": "bookmarker.searchBookmarks",
-        "key": "ctrl+alt+f",
-        "mac": "cmd+alt+f"
       }
     ],
     "configuration": {
