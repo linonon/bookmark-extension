@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { BookmarkStorageService } from './services/bookmarkStorage';
 import { BookmarkTreeProvider } from './providers/bookmarkTreeProvider';
-import { BookmarkItem, CategoryItem } from './models/bookmark';
+import { Bookmark, BookmarkItem, CategoryItem } from './models/bookmark';
+import { errorHandler } from './utils/errorHandler';
 
 export function activate(context: vscode.ExtensionContext) {
 	// Initialize services
@@ -31,6 +32,8 @@ export function activate(context: vscode.ExtensionContext) {
 				// Single selection: remove single bookmark
 				return treeProvider.removeBookmark(item);
 			}
+			// Return undefined for cases where no action is taken
+			return undefined;
 		},
 		'bookmarker.editBookmarkLabel': (item: BookmarkItem, allSelected?: BookmarkItem[]) => {
 			// Only allow editing single bookmark labels
@@ -42,7 +45,7 @@ export function activate(context: vscode.ExtensionContext) {
 		},
 		'bookmarker.clearAllBookmarks': () => treeProvider.clearAllBookmarks(),
 		'bookmarker.refreshBookmarks': () => treeProvider.refresh(),
-		'bookmarker.openBookmark': (bookmark: any) => treeProvider.openBookmarkFile(bookmark),
+		'bookmarker.openBookmark': (bookmark: Bookmark) => treeProvider.openBookmarkFile(bookmark),
 		'bookmarker.renameCategory': (item: CategoryItem) => item?.categoryName && treeProvider.renameCategory(item),
 		'bookmarker.removeCategory': (item: CategoryItem) => item?.categoryName && treeProvider.removeCategory(item),
 		'bookmarker.createNewCategory': () => treeProvider.createNewCategory(),
@@ -57,9 +60,17 @@ export function activate(context: vscode.ExtensionContext) {
 	// Add all disposables to context
 	context.subscriptions.push(treeView, ...commands);
 	
-	// Extension activated silently
+	// Initialize error handler
+	errorHandler.info('Bookmarker extension activated', {
+		operation: 'activate',
+		showToUser: false
+	});
 }
 
 export function deactivate() {
-	// Cleanup if needed
+	errorHandler.info('Bookmarker extension deactivated', {
+		operation: 'deactivate',
+		showToUser: false
+	});
+	errorHandler.dispose();
 }

@@ -1,33 +1,72 @@
 import * as vscode from 'vscode';
 import { Bookmark, BookmarkData, CategoryNode } from '../models/bookmark';
 import * as fs from 'fs';
+import { errorHandler } from '../utils/errorHandler';
+import { STORAGE_KEYS, CATEGORIES } from '../constants';
+import { fileExistenceCache, categoryTreeCache } from '../utils/cache';
 
 export class BookmarkStorageService {
-    private static readonly WORKSPACE_STORAGE_KEY = 'workspace-bookmarks';
-    public static readonly DEFAULT_CATEGORY = 'Uncategorized';
+    private static readonly WORKSPACE_STORAGE_KEY = STORAGE_KEYS.WORKSPACE_BOOKMARKS;
+    public static readonly DEFAULT_CATEGORY = CATEGORIES.DEFAULT;
     
     constructor(private context: vscode.ExtensionContext) {}
     
     async getBookmarks(): Promise<BookmarkData> {
-        const bookmarks = this.context.workspaceState.get<BookmarkData>(BookmarkStorageService.WORKSPACE_STORAGE_KEY, []);
-        return this.filterValidBookmarks(bookmarks);
+        return await errorHandler.handleAsync(
+            async () => {
+                const bookmarks = this.context.workspaceState.get<BookmarkData>(
+                    BookmarkStorageService.WORKSPACE_STORAGE_KEY, 
+                    []
+                );
+                return this.filterValidBookmarks(bookmarks);
+            },
+            {
+                operation: 'getBookmarks',
+                showToUser: false // Internal operation, don't show errors to user
+            }
+        ) ?? [];
     }
     
     async addBookmark(bookmark: Bookmark): Promise<void> {
-        const bookmarks = await this.getBookmarks();
-        
-        // Check if bookmark already exists for this file
-        const existingIndex = bookmarks.findIndex(b => 
-            b.filePath === bookmark.filePath && b.lineNumber === bookmark.lineNumber
+        await errorHandler.handleAsync(
+            async () => {
+                const bookmarks = await this.getBookmarks();
+                
+                // Check if bookmark already exists for this file
+                const existingIndex = bookmarks.findIndex(b => 
+                    b.filePath === bookmark.filePath && b.lineNumber === bookmark.lineNumber
+                );
+                
+                if (existingIndex >= 0) {
+                    bookmarks[existingIndex] = bookmark;
+                    errorHandler.debug('Bookmark updated', {
+                        operation: 'addBookmark',
+                        details: { filePath: bookmark.filePath, lineNumber: bookmark.lineNumber }
+                    });
+                } else {
+                    bookmarks.push(bookmark);
+                    errorHandler.debug('Bookmark added', {
+                        operation: 'addBookmark',
+                        details: { filePath: bookmark.filePath, lineNumber: bookmark.lineNumber }
+                    });
+                }
+                
+                await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
+                this.clearCaches();
+            },
+            {
+                operation: 'addBookmark',
+                details: { bookmarkId: bookmark.id, filePath: bookmark.filePath },
+                showToUser: true,
+                userMessage: 'Failed to add bookmark. Please try again.'
+            }
         );
-        
-        if (existingIndex >= 0) {
-            bookmarks[existingIndex] = bookmark;
-        } else {
-            bookmarks.push(bookmark);
-        }
-        
-        await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
+    }
+
+    private clearCaches(): void {
+        // Clear caches when bookmark data changes
+        categoryTreeCache.clear();
+        fileExistenceCache.clear();
     }
     
     async removeBookmark(bookmarkId: string): Promise<void> {
@@ -52,8 +91,21 @@ export class BookmarkStorageService {
         const bookmarkIndex = bookmarks.findIndex(b => b.id === bookmarkId);
         
         if (bookmarkIndex >= 0) {
-            bookmarks[bookmarkIndex] = { ...bookmarks[bookmarkIndex], ...updates };
-            await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
+            const existingBookmark = bookmarks[bookmarkIndex];
+            if (existingBookmark) {
+                // Only update properties that are provided in updates
+                const updatedBookmark: Bookmark = {
+                    id: updates.id ?? existingBookmark.id,
+                    filePath: updates.filePath ?? existingBookmark.filePath,
+                    label: updates.label !== undefined ? updates.label : existingBookmark.label,
+                    lineNumber: updates.lineNumber !== undefined ? updates.lineNumber : existingBookmark.lineNumber,
+                    workspacePath: updates.workspacePath !== undefined ? updates.workspacePath : existingBookmark.workspacePath,
+                    category: updates.category !== undefined ? updates.category : existingBookmark.category,
+                    createdAt: updates.createdAt ?? existingBookmark.createdAt
+                };
+                bookmarks[bookmarkIndex] = updatedBookmark;
+                await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
+            }
         }
     }
     
@@ -67,27 +119,59 @@ export class BookmarkStorageService {
     
     private async filterValidBookmarks(bookmarks: BookmarkData): Promise<BookmarkData> {
         const validBookmarks: BookmarkData = [];
+        let removedCount = 0;
         
         for (const bookmark of bookmarks) {
             // Skip file existence check for placeholder bookmarks
-            if (bookmark.filePath.startsWith('__placeholder__')) {
+            if (bookmark.filePath.startsWith(CATEGORIES.PLACEHOLDER_PREFIX)) {
                 validBookmarks.push(bookmark);
                 continue;
             }
             
-            try {
-                // Check if file still exists
-                await fs.promises.access(bookmark.filePath);
+            // Check cache first for file existence
+            const cacheKey = `file-exists:${bookmark.filePath}`;
+            let fileExists = fileExistenceCache.get(cacheKey);
+            
+            if (fileExists === undefined) {
+                // Not in cache, check file system
+                try {
+                    await fs.promises.access(bookmark.filePath);
+                    fileExists = true;
+                    fileExistenceCache.set(cacheKey, true, 30000); // Cache for 30 seconds
+                } catch (error) {
+                    fileExists = false;
+                    fileExistenceCache.set(cacheKey, false, 5000); // Cache negative results for 5 seconds
+                }
+            }
+            
+            if (fileExists) {
                 validBookmarks.push(bookmark);
-            } catch (error) {
+            } else {
                 // File no longer exists, skip this bookmark
-                // File no longer exists, skip this bookmark
+                removedCount++;
+                errorHandler.debug('Bookmark removed - file no longer exists', {
+                    operation: 'filterValidBookmarks',
+                    details: { 
+                        bookmarkId: bookmark.id, 
+                        filePath: bookmark.filePath,
+                        label: bookmark.label 
+                    }
+                });
             }
         }
         
         // If we filtered out any bookmarks, update the storage
         if (validBookmarks.length !== bookmarks.length) {
             await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, validBookmarks);
+            
+            if (removedCount > 0) {
+                errorHandler.info(`Cleaned up ${removedCount} bookmarks for deleted files`, {
+                    operation: 'filterValidBookmarks',
+                    details: { removedCount, totalBookmarks: bookmarks.length },
+                    showToUser: removedCount >= 5, // Only notify users if many bookmarks were removed
+                    userMessage: `Removed ${removedCount} bookmarks for files that no longer exist.`
+                });
+            }
         }
         
         return validBookmarks;
@@ -143,6 +227,9 @@ export class BookmarkStorageService {
         
         for (let i = 0; i < parts.length; i++) {
             const part = parts[i];
+            if (!part) {
+                continue; // Skip undefined or empty parts
+            }
             currentPath = currentPath ? `${currentPath}/${part}` : part;
             
             if (!currentNode.children.has(part)) {
@@ -155,7 +242,10 @@ export class BookmarkStorageService {
                 });
             }
             
-            currentNode = currentNode.children.get(part)!;
+            const childNode = currentNode.children.get(part);
+            if (childNode) {
+                currentNode = childNode;
+            }
         }
         
         // Add bookmark to the leaf node
@@ -199,8 +289,11 @@ export class BookmarkStorageService {
         const bookmarkIndex = bookmarks.findIndex(b => b.id === bookmarkId);
         
         if (bookmarkIndex >= 0) {
-            bookmarks[bookmarkIndex].category = newCategory;
-            await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
+            const bookmark = bookmarks[bookmarkIndex];
+            if (bookmark) {
+                bookmark.category = newCategory;
+                await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
+            }
         }
     }
     

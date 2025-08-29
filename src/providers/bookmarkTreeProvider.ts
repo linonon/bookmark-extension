@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 import { Bookmark, BookmarkItem, CategoryItem, CategoryNode } from '../models/bookmark';
 import { BookmarkStorageService } from '../services/bookmarkStorage';
+import { errorHandler } from '../utils/errorHandler';
+import { DRAG_DROP, CATEGORIES } from '../constants';
+import { InputValidator } from '../utils/validation';
+import { debouncer, categoryTreeCache } from '../utils/cache';
 
 export class BookmarkTreeProvider implements 
     vscode.TreeDataProvider<BookmarkItem | CategoryItem>, 
@@ -10,8 +14,8 @@ export class BookmarkTreeProvider implements
     readonly onDidChangeTreeData: vscode.Event<BookmarkItem | CategoryItem | undefined | null | void> = this._onDidChangeTreeData.event;
     
     // Drag and drop MIME types
-    readonly dropMimeTypes = ['application/vnd.code.tree.bookmarkExplorer'];
-    readonly dragMimeTypes = ['application/vnd.code.tree.bookmarkExplorer'];
+    readonly dropMimeTypes = [DRAG_DROP.MIME_TYPE];
+    readonly dragMimeTypes = [DRAG_DROP.MIME_TYPE];
     
     constructor(private storageService: BookmarkStorageService) {}
     
@@ -47,8 +51,20 @@ export class BookmarkTreeProvider implements
         });
     }
     
-    refresh(): void {
+    private _debouncedRefresh = debouncer.debounce('tree-refresh', () => {
         this._onDidChangeTreeData.fire();
+        // Invalidate cache when tree structure changes
+        categoryTreeCache.clear();
+    }, 100); // Debounce for 100ms
+
+    refresh(): void {
+        this._debouncedRefresh();
+    }
+
+    // Immediate refresh for critical operations
+    refreshImmediate(): void {
+        this._onDidChangeTreeData.fire();
+        categoryTreeCache.clear();
     }
     
     getTreeItem(element: BookmarkItem | CategoryItem): vscode.TreeItem {
@@ -87,7 +103,7 @@ export class BookmarkTreeProvider implements
             
             // Add root-level bookmarks (if any), excluding placeholder bookmarks
             for (const bookmark of categoryTree.bookmarks) {
-                if (!bookmark.filePath.startsWith('__placeholder__')) {
+                if (!bookmark.filePath.startsWith(CATEGORIES.PLACEHOLDER_PREFIX)) {
                     result.push(new BookmarkItem(bookmark));
                 }
             }
@@ -132,7 +148,7 @@ export class BookmarkTreeProvider implements
             
             // Add bookmarks in this category, excluding placeholder bookmarks
             for (const bookmark of categoryNode.bookmarks) {
-                if (!bookmark.filePath.startsWith('__placeholder__')) {
+                if (!bookmark.filePath.startsWith(CATEGORIES.PLACEHOLDER_PREFIX)) {
                     result.push(new BookmarkItem(bookmark));
                 }
             }
@@ -168,7 +184,7 @@ export class BookmarkTreeProvider implements
     
     private getBookmarkCountInNode(node: CategoryNode): number {
         // Count only non-placeholder bookmarks
-        let count = node.bookmarks.filter(b => !b.filePath.startsWith('__placeholder__')).length;
+        let count = node.bookmarks.filter(b => !b.filePath.startsWith(CATEGORIES.PLACEHOLDER_PREFIX)).length;
         
         // Recursively count bookmarks in child nodes
         for (const [, childNode] of node.children) {
@@ -181,7 +197,11 @@ export class BookmarkTreeProvider implements
     async addCurrentFileBookmark(label?: string, lineNumber?: number, category?: string): Promise<void> {
         const activeEditor = vscode.window.activeTextEditor;
         if (!activeEditor) {
-            vscode.window.showErrorMessage('No active file to bookmark');
+            errorHandler.warn('No active file to bookmark', {
+                operation: 'addCurrentFileBookmark',
+                showToUser: true,
+                userMessage: 'No active file to bookmark. Please open a file first.'
+            });
             return;
         }
         
@@ -221,12 +241,13 @@ export class BookmarkTreeProvider implements
             }
         }
         
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(activeEditor.document.uri);
         const bookmark: Bookmark = {
             id: this.storageService.generateBookmarkId(),
             filePath: filePath,
             label: defaultLabel,
             lineNumber: currentLine,
-            workspacePath: vscode.workspace.getWorkspaceFolder(activeEditor.document.uri)?.uri.fsPath,
+            workspacePath: workspaceFolder?.uri.fsPath ?? undefined,
             category: selectedCategory,
             createdAt: new Date()
         };
@@ -283,12 +304,13 @@ export class BookmarkTreeProvider implements
             selectedCategory = newCategory;
         }
         
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(activeEditor.document.uri);
         const bookmark: Bookmark = {
             id: this.storageService.generateBookmarkId(),
             filePath: filePath,
             label: label,
             lineNumber: currentLine,
-            workspacePath: vscode.workspace.getWorkspaceFolder(activeEditor.document.uri)?.uri.fsPath,
+            workspacePath: workspaceFolder?.uri.fsPath ?? undefined,
             category: selectedCategory,
             createdAt: new Date()
         };
@@ -308,7 +330,10 @@ export class BookmarkTreeProvider implements
         }
         
         if (bookmarkItems.length === 1) {
-            return this.removeBookmark(bookmarkItems[0]);
+            const firstItem = bookmarkItems[0];
+            if (firstItem) {
+                return this.removeBookmark(firstItem);
+            }
         }
         
         // Ask for confirmation for multiple bookmarks
@@ -335,12 +360,38 @@ export class BookmarkTreeProvider implements
     async editBookmarkLabel(bookmarkItem: BookmarkItem): Promise<void> {
         const newLabel = await vscode.window.showInputBox({
             prompt: 'Enter new bookmark label',
-            value: bookmarkItem.bookmark.label || this.getFileName(bookmarkItem.bookmark.filePath)
+            value: bookmarkItem.bookmark.label || this.getFileName(bookmarkItem.bookmark.filePath),
+            validateInput: (value) => {
+                if (!value) {
+                    return 'Label cannot be empty';
+                }
+                const validation = InputValidator.validateBookmarkLabel(value);
+                return validation.isValid ? null : validation.error;
+            }
         });
         
         if (newLabel !== undefined && newLabel !== bookmarkItem.bookmark.label) {
-            await this.storageService.updateBookmark(bookmarkItem.bookmark.id, { label: newLabel });
-            this.refresh();
+            const validation = InputValidator.validateBookmarkLabel(newLabel);
+            if (validation.isValid && validation.sanitized) {
+                await this.storageService.updateBookmark(bookmarkItem.bookmark.id, { label: validation.sanitized });
+                this.refresh();
+                
+                errorHandler.debug('Bookmark label updated', {
+                    operation: 'editBookmarkLabel',
+                    details: { 
+                        bookmarkId: bookmarkItem.bookmark.id, 
+                        oldLabel: bookmarkItem.bookmark.label,
+                        newLabel: validation.sanitized 
+                    }
+                });
+            } else {
+                errorHandler.warn('Invalid bookmark label provided', {
+                    operation: 'editBookmarkLabel',
+                    details: { error: validation.error },
+                    showToUser: true,
+                    userMessage: validation.error || 'Invalid bookmark label'
+                });
+            }
         }
     }
     
@@ -359,18 +410,46 @@ export class BookmarkTreeProvider implements
     }
     
     async openBookmarkFile(bookmark: Bookmark): Promise<void> {
-        try {
-            const document = await vscode.workspace.openTextDocument(bookmark.filePath);
-            const editor = await vscode.window.showTextDocument(document);
-            
-            if (bookmark.lineNumber) {
-                const position = new vscode.Position(bookmark.lineNumber - 1, 0);
-                editor.selection = new vscode.Selection(position, position);
-                editor.revealRange(new vscode.Range(position, position));
+        await errorHandler.handleAsync(
+            async () => {
+                const document = await vscode.workspace.openTextDocument(bookmark.filePath);
+                const editor = await vscode.window.showTextDocument(document);
+                
+                if (bookmark.lineNumber) {
+                    const position = new vscode.Position(bookmark.lineNumber - 1, 0);
+                    editor.selection = new vscode.Selection(position, position);
+                    editor.revealRange(new vscode.Range(position, position));
+                    
+                    errorHandler.debug('Opened bookmark file at specific line', {
+                        operation: 'openBookmarkFile',
+                        details: { 
+                            filePath: bookmark.filePath, 
+                            lineNumber: bookmark.lineNumber,
+                            label: bookmark.label 
+                        }
+                    });
+                } else {
+                    errorHandler.debug('Opened bookmark file', {
+                        operation: 'openBookmarkFile',
+                        details: { 
+                            filePath: bookmark.filePath,
+                            label: bookmark.label 
+                        }
+                    });
+                }
+            },
+            {
+                operation: 'openBookmarkFile',
+                details: { 
+                    filePath: bookmark.filePath, 
+                    lineNumber: bookmark.lineNumber,
+                    bookmarkId: bookmark.id,
+                    label: bookmark.label
+                },
+                showToUser: true,
+                userMessage: `Failed to open bookmarked file: ${bookmark.label || bookmark.filePath.split('/').pop()}`
             }
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to open file: ${bookmark.filePath}`);
-        }
+        );
     }
     
     
@@ -418,7 +497,7 @@ export class BookmarkTreeProvider implements
         
         // Check if category only contains placeholder bookmarks (empty category)
         const realBookmarks = bookmarksToUpdate.filter(bookmark => 
-            !bookmark.filePath.startsWith('__placeholder__')
+            !bookmark.filePath.startsWith(CATEGORIES.PLACEHOLDER_PREFIX)
         );
         
         let shouldRemove = false;
@@ -452,34 +531,45 @@ export class BookmarkTreeProvider implements
             prompt: 'Enter category name (use / for nested categories, e.g., Frontend/React)',
             placeHolder: 'My Category or Parent/Child Category',
             validateInput: (value) => {
-                if (!value.trim()) {
+                if (!value) {
                     return 'Category name cannot be empty';
                 }
-                if (value.includes('//') || value.startsWith('/') || value.endsWith('/')) {
-                    return 'Invalid category path format';
-                }
-                return null;
+                const validation = InputValidator.validateCategoryName(value);
+                return validation.isValid ? null : validation.error;
             }
         });
         
-        if (categoryName && categoryName.trim()) {
-            const trimmedName = categoryName.trim();
-            
-            // Create a temporary placeholder bookmark to establish the category structure
-            const placeholderBookmark: Bookmark = {
-                id: this.storageService.generateBookmarkId(),
-                filePath: '__placeholder__' + trimmedName,
-                label: '[Empty Category - Add bookmarks here]',
-                lineNumber: undefined,
-                workspacePath: undefined,
-                category: trimmedName,
-                createdAt: new Date()
-            };
-            
-            await this.storageService.addBookmark(placeholderBookmark);
-            this.refresh();
-            
-            vscode.window.showInformationMessage(`Category "${trimmedName}" created successfully!`);
+        if (categoryName) {
+            const validation = InputValidator.validateCategoryName(categoryName);
+            if (validation.isValid && validation.sanitized) {
+                // Create a temporary placeholder bookmark to establish the category structure
+                const placeholderBookmark: Bookmark = {
+                    id: this.storageService.generateBookmarkId(),
+                    filePath: CATEGORIES.PLACEHOLDER_PREFIX + validation.sanitized,
+                    label: CATEGORIES.EMPTY_MESSAGE,
+                    lineNumber: undefined,
+                    workspacePath: undefined,
+                    category: validation.sanitized,
+                    createdAt: new Date()
+                };
+                
+                await this.storageService.addBookmark(placeholderBookmark);
+                this.refresh();
+                
+                errorHandler.info(`Category "${validation.sanitized}" created successfully`, {
+                    operation: 'createNewCategory',
+                    details: { categoryName: validation.sanitized },
+                    showToUser: true,
+                    userMessage: `Category "${validation.sanitized}" created successfully!`
+                });
+            } else {
+                errorHandler.warn('Invalid category name provided', {
+                    operation: 'createNewCategory',
+                    details: { error: validation.error },
+                    showToUser: true,
+                    userMessage: validation.error || 'Invalid category name'
+                });
+            }
         }
     }
     
@@ -497,8 +587,8 @@ export class BookmarkTreeProvider implements
             // This bookmark will be removed once a real bookmark is added to this category
             const placeholderBookmark: Bookmark = {
                 id: this.storageService.generateBookmarkId(),
-                filePath: '__placeholder__' + fullSubCategoryPath,
-                label: '[Empty Category - Add bookmarks here]',
+                filePath: CATEGORIES.PLACEHOLDER_PREFIX + fullSubCategoryPath,
+                label: CATEGORIES.EMPTY_MESSAGE,
                 lineNumber: undefined,
                 workspacePath: undefined,
                 category: fullSubCategoryPath,
@@ -523,7 +613,7 @@ export class BookmarkTreeProvider implements
         const bookmarks = await this.storageService.getBookmarks();
         const filteredBookmarks = bookmarks.filter(bookmark => {
             // Exclude placeholder bookmarks from search results
-            if (bookmark.filePath.startsWith('__placeholder__')) {
+            if (bookmark.filePath.startsWith(CATEGORIES.PLACEHOLDER_PREFIX)) {
                 return false;
             }
             const fileName = this.getFileName(bookmark.filePath).toLowerCase();
@@ -578,16 +668,37 @@ export class BookmarkTreeProvider implements
             category: item.bookmark.category
         }));
         
-        treeDataTransfer.set('application/vnd.code.tree.bookmarkExplorer', new vscode.DataTransferItem(draggedData));
+        treeDataTransfer.set('DRAG_DROP.MIME_TYPE', new vscode.DataTransferItem(draggedData));
     }
     
     async handleDrop(target: BookmarkItem | CategoryItem | undefined, dataTransfer: vscode.DataTransfer, _token: vscode.CancellationToken): Promise<void> {
-        // Get the dragged bookmark data
-        const transferItem = dataTransfer.get('application/vnd.code.tree.bookmarkExplorer');
-        if (!transferItem) {
+        const draggedBookmarks = this.extractDraggedBookmarks(dataTransfer);
+        if (!draggedBookmarks || draggedBookmarks.length === 0) {
             return;
         }
-        
+
+        if (draggedBookmarks.length === 1) {
+            const firstBookmark = draggedBookmarks[0];
+            if (firstBookmark) {
+                await this.handleSingleBookmarkDrop(firstBookmark, target);
+            }
+        } else {
+            await this.handleMultipleBookmarkDrop(draggedBookmarks, target);
+        }
+    }
+
+    private extractDraggedBookmarks(dataTransfer: vscode.DataTransfer): Array<{
+        id: string;
+        filePath: string;
+        label?: string;
+        lineNumber?: number;
+        category?: string;
+    }> | undefined {
+        const transferItem = dataTransfer.get('DRAG_DROP.MIME_TYPE');
+        if (!transferItem) {
+            return undefined;
+        }
+
         const draggedBookmarks = transferItem.value as Array<{
             id: string;
             filePath: string;
@@ -595,99 +706,118 @@ export class BookmarkTreeProvider implements
             lineNumber?: number;
             category?: string;
         }>;
-        
-        if (!draggedBookmarks || draggedBookmarks.length === 0) {
+
+        return draggedBookmarks && draggedBookmarks.length > 0 ? draggedBookmarks : undefined;
+    }
+
+    private async handleSingleBookmarkDrop(
+        draggedBookmark: { id: string; filePath: string; label?: string; lineNumber?: number; category?: string },
+        target: BookmarkItem | CategoryItem | undefined
+    ): Promise<void> {
+        if (!draggedBookmark) {
             return;
         }
-        
-        // Handle both single and multiple bookmark operations
-        if (draggedBookmarks.length === 1) {
-            // Single bookmark - use existing logic with potential for reordering
-            const draggedBookmark = draggedBookmarks[0];
-            
-            // Determine target category and position
-            let targetCategory = BookmarkStorageService.DEFAULT_CATEGORY;
-            let targetPosition: number | undefined;
-            
-            if (target instanceof CategoryItem) {
-                // Dropped on a category folder - move to category, append at end
-                targetCategory = target.fullPath;
-            } else if (target instanceof BookmarkItem) {
-                // Dropped on another bookmark
-                targetCategory = target.bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
-                const currentCategory = draggedBookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
-                
-                if (currentCategory === targetCategory) {
-                    // Same category - this is a reorder operation
-                    const categorizedBookmarks = await this.storageService.getBookmarksByCategory();
-                    const categoryBookmarks = categorizedBookmarks.get(targetCategory) || [];
-                    
-                    // Find target position
-                    targetPosition = categoryBookmarks.findIndex(b => b.id === target.bookmark.id);
-                    
-                    // Reorder within category
-                    await this.reorderBookmarkInCategory(draggedBookmark.id, targetCategory, targetPosition);
-                    return;
-                }
-            } else {
-                // Dropped on empty space - use default category
-                targetCategory = BookmarkStorageService.DEFAULT_CATEGORY;
-            }
-            
-            // Cross-category move
-            const currentCategory = draggedBookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
-            if (currentCategory !== targetCategory) {
-                // Check if source category will become empty after move
-                await this.preserveEmptyCategoryAfterMove(currentCategory, draggedBookmark.id);
-                
-                await this.storageService.moveBookmarkToCategory(draggedBookmark.id, targetCategory);
-                this.refresh();
-            }
+
+        const targetCategory = this.determineTargetCategory(target);
+        const currentCategory = draggedBookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+
+        // Handle reordering within the same category
+        if (target instanceof BookmarkItem && currentCategory === targetCategory) {
+            await this.handleReorderOperation(draggedBookmark, target, targetCategory);
+            return;
+        }
+
+        // Handle cross-category move
+        if (currentCategory !== targetCategory) {
+            await this.handleCrossCategoryMove(draggedBookmark, currentCategory, targetCategory);
+        }
+    }
+
+    private async handleMultipleBookmarkDrop(
+        draggedBookmarks: Array<{ id: string; filePath: string; label?: string; lineNumber?: number; category?: string }>,
+        target: BookmarkItem | CategoryItem | undefined
+    ): Promise<void> {
+        const targetCategory = this.determineTargetCategory(target);
+        const sourceCategories = this.collectSourceCategories(draggedBookmarks, targetCategory);
+
+        const moveCount = await this.moveBookmarksToCategory(draggedBookmarks, targetCategory);
+        await this.preserveEmptySourceCategories(sourceCategories, draggedBookmarks.map(b => b.id));
+
+        this.refresh();
+        this.showMoveSuccessMessage(moveCount, targetCategory);
+    }
+
+    private determineTargetCategory(target: BookmarkItem | CategoryItem | undefined): string {
+        if (target instanceof CategoryItem) {
+            return target.fullPath;
+        } else if (target instanceof BookmarkItem) {
+            return target.bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
         } else {
-            // Multiple bookmarks - batch move only (no reordering)
-            let targetCategory = BookmarkStorageService.DEFAULT_CATEGORY;
-            
-            if (target instanceof CategoryItem) {
-                // Dropped on a category folder - move all to this category
-                targetCategory = target.fullPath;
-            } else if (target instanceof BookmarkItem) {
-                // Dropped on another bookmark - move all to that bookmark's category
-                targetCategory = target.bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
-            } else {
-                // Dropped on empty space - move all to default category
-                targetCategory = BookmarkStorageService.DEFAULT_CATEGORY;
+            return BookmarkStorageService.DEFAULT_CATEGORY;
+        }
+    }
+
+    private async handleReorderOperation(
+        draggedBookmark: { id: string; category?: string },
+        target: BookmarkItem,
+        targetCategory: string
+    ): Promise<void> {
+        const categorizedBookmarks = await this.storageService.getBookmarksByCategory();
+        const categoryBookmarks = categorizedBookmarks.get(targetCategory) || [];
+        const targetPosition = categoryBookmarks.findIndex(b => b.id === target.bookmark.id);
+        
+        await this.reorderBookmarkInCategory(draggedBookmark.id, targetCategory, targetPosition);
+    }
+
+    private async handleCrossCategoryMove(
+        draggedBookmark: { id: string; category?: string },
+        currentCategory: string,
+        targetCategory: string
+    ): Promise<void> {
+        await this.preserveEmptyCategoryAfterMove(currentCategory, draggedBookmark.id);
+        await this.storageService.moveBookmarkToCategory(draggedBookmark.id, targetCategory);
+        this.refresh();
+    }
+
+    private collectSourceCategories(
+        draggedBookmarks: Array<{ category?: string }>,
+        targetCategory: string
+    ): Set<string> {
+        const sourceCategories = new Set<string>();
+        for (const bookmark of draggedBookmarks) {
+            const sourceCategory = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+            if (sourceCategory !== targetCategory) {
+                sourceCategories.add(sourceCategory);
             }
-            
-            // Collect source categories that might become empty
-            const sourceCategories = new Set<string>();
-            for (const bookmark of draggedBookmarks) {
-                const sourceCategory = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
-                if (sourceCategory !== targetCategory) {
-                    sourceCategories.add(sourceCategory);
-                }
+        }
+        return sourceCategories;
+    }
+
+    private async moveBookmarksToCategory(
+        draggedBookmarks: Array<{ id: string; category?: string }>,
+        targetCategory: string
+    ): Promise<number> {
+        let moveCount = 0;
+        for (const bookmark of draggedBookmarks) {
+            const currentCategory = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
+            if (currentCategory !== targetCategory) {
+                await this.storageService.moveBookmarkToCategory(bookmark.id, targetCategory);
+                moveCount++;
             }
-            
-            // Move all bookmarks to target category
-            let moveCount = 0;
-            for (const bookmark of draggedBookmarks) {
-                const currentCategory = bookmark.category || BookmarkStorageService.DEFAULT_CATEGORY;
-                if (currentCategory !== targetCategory) {
-                    await this.storageService.moveBookmarkToCategory(bookmark.id, targetCategory);
-                    moveCount++;
-                }
-            }
-            
-            // Preserve empty categories by adding placeholders
-            for (const sourceCategory of sourceCategories) {
-                await this.preserveEmptyCategoryAfterMultipleMove(sourceCategory, draggedBookmarks.map(b => b.id));
-            }
-            
-            this.refresh();
-            
-            if (moveCount > 0) {
-                const categoryName = targetCategory === BookmarkStorageService.DEFAULT_CATEGORY ? 'Uncategorized' : targetCategory;
-                vscode.window.showInformationMessage(`Moved ${moveCount} bookmark(s) to "${categoryName}".`);
-            }
+        }
+        return moveCount;
+    }
+
+    private async preserveEmptySourceCategories(sourceCategories: Set<string>, movingBookmarkIds: string[]): Promise<void> {
+        for (const sourceCategory of sourceCategories) {
+            await this.preserveEmptyCategoryAfterMultipleMove(sourceCategory, movingBookmarkIds);
+        }
+    }
+
+    private showMoveSuccessMessage(moveCount: number, targetCategory: string): void {
+        if (moveCount > 0) {
+            const categoryName = targetCategory === BookmarkStorageService.DEFAULT_CATEGORY ? 'Uncategorized' : targetCategory;
+            vscode.window.showInformationMessage(`Moved ${moveCount} bookmark(s) to "${categoryName}".`);
         }
     }
     
@@ -705,7 +835,7 @@ export class BookmarkTreeProvider implements
         
         // Count real bookmarks (excluding placeholders and the one being moved)
         const realBookmarks = categoryBookmarks.filter(bookmark => 
-            !bookmark.filePath.startsWith('__placeholder__') && 
+            !bookmark.filePath.startsWith(CATEGORIES.PLACEHOLDER_PREFIX) && 
             bookmark.id !== movingBookmarkId
         );
         
@@ -713,8 +843,8 @@ export class BookmarkTreeProvider implements
         if (realBookmarks.length === 0) {
             const placeholderBookmark: Bookmark = {
                 id: this.storageService.generateBookmarkId(),
-                filePath: '__placeholder__' + sourceCategory,
-                label: '[Empty Category - Add bookmarks here]',
+                filePath: CATEGORIES.PLACEHOLDER_PREFIX + sourceCategory,
+                label: CATEGORIES.EMPTY_MESSAGE,
                 lineNumber: undefined,
                 workspacePath: undefined,
                 category: sourceCategory,
@@ -739,7 +869,7 @@ export class BookmarkTreeProvider implements
         
         // Count real bookmarks (excluding placeholders and the ones being moved)
         const realBookmarks = categoryBookmarks.filter(bookmark => 
-            !bookmark.filePath.startsWith('__placeholder__') && 
+            !bookmark.filePath.startsWith(CATEGORIES.PLACEHOLDER_PREFIX) && 
             !movingBookmarkIds.includes(bookmark.id)
         );
         
@@ -747,8 +877,8 @@ export class BookmarkTreeProvider implements
         if (realBookmarks.length === 0) {
             const placeholderBookmark: Bookmark = {
                 id: this.storageService.generateBookmarkId(),
-                filePath: '__placeholder__' + sourceCategory,
-                label: '[Empty Category - Add bookmarks here]',
+                filePath: CATEGORIES.PLACEHOLDER_PREFIX + sourceCategory,
+                label: CATEGORIES.EMPTY_MESSAGE,
                 lineNumber: undefined,
                 workspacePath: undefined,
                 category: sourceCategory,

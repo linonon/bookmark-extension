@@ -4,10 +4,10 @@ import { BookmarkStorageService } from '../services/bookmarkStorage';
 export interface Bookmark {
     id: string;
     filePath: string;
-    label?: string;
-    lineNumber?: number;
-    workspacePath?: string;
-    category?: string;
+    label?: string | undefined;
+    lineNumber?: number | undefined;
+    workspacePath?: string | undefined;
+    category?: string | undefined;
     createdAt: Date;
 }
 
@@ -28,7 +28,7 @@ export class CategoryItem extends vscode.TreeItem {
         public readonly bookmarkCount: number,
         public readonly hasChildren: boolean = false,
         public readonly level: number = 0,
-        public readonly collapsibleState: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.Expanded
+        public override readonly collapsibleState: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.Expanded
     ) {
         super(categoryName, collapsibleState);
         
@@ -54,7 +54,7 @@ export class CategoryItem extends vscode.TreeItem {
 export class BookmarkItem extends vscode.TreeItem {
     constructor(
         public readonly bookmark: Bookmark,
-        public readonly collapsibleState: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.None
+        public override readonly collapsibleState: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.None
     ) {
         super(bookmark.label || bookmark.filePath, collapsibleState);
         
