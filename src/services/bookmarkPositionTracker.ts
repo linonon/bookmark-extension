@@ -30,12 +30,30 @@ export class BookmarkPositionTracker implements vscode.Disposable {
         // Check if position tracking is enabled via configuration
         const config = vscode.workspace.getConfiguration('bookmarker');
         const trackingEnabled = config.get<boolean>('positionTracking.enabled', true);
+        const debug = config.get<boolean>('positionTracking.debug', false);
         
         if (!this.isEnabled || !trackingEnabled || event.contentChanges.length === 0) {
             return;
         }
 
         const filePath = event.document.uri.fsPath;
+        
+        // Optional verbose diagnostics for each content change
+        if (debug) {
+            for (const c of event.contentChanges) {
+                errorHandler.debug('Doc change', {
+                    operation: 'onDocumentChanged',
+                    details: {
+                        filePath,
+                        startLine: c.range.start.line,
+                        endLine: c.range.end.line,
+                        startChar: c.range.start.character,
+                        insertedNewlines: (c.text.match(/\n/g) || []).length,
+                        textPreview: c.text.replace(/\n/g, '\\n').substring(0, 80)
+                    }
+                });
+            }
+        }
         
         try {
             // Get bookmarks for this file
@@ -51,11 +69,11 @@ export class BookmarkPositionTracker implements vscode.Disposable {
             }
 
             // Update bookmark positions based on document changes
-            const updatedBookmarks = this.updateBookmarkPositions(event.contentChanges, fileBookmarks);
-            
-            if (updatedBookmarks.length > 0) {
-                // Debounce updates to avoid excessive storage operations
-                this.debounceBookmarkUpdate(filePath, updatedBookmarks);
+            const { updates: updatedBookmarks, removals: removedBookmarkIds } = this.updateBookmarkPositions(event.contentChanges, fileBookmarks);
+
+            if (updatedBookmarks.length > 0 || removedBookmarkIds.length > 0) {
+                // Debounce updates/removals to avoid excessive storage operations
+                this.debounceBookmarkUpdate(filePath, updatedBookmarks, removedBookmarkIds);
             }
 
         } catch (error) {
@@ -69,8 +87,9 @@ export class BookmarkPositionTracker implements vscode.Disposable {
     private updateBookmarkPositions(
         changes: readonly vscode.TextDocumentContentChangeEvent[], 
         bookmarks: Bookmark[]
-    ): Bookmark[] {
+    ): { updates: Bookmark[]; removals: string[] } {
         const updatedBookmarks: Bookmark[] = [];
+        const removedBookmarkIds = new Set<string>();
         
         // Sort changes from bottom to top to avoid position conflicts
         const sortedChanges = [...changes].sort((a, b) => b.range.start.line - a.range.start.line);
@@ -80,16 +99,21 @@ export class BookmarkPositionTracker implements vscode.Disposable {
             
             if (lineDelta !== 0) {
                 bookmarks.forEach(bookmark => {
+                    if (removedBookmarkIds.has(bookmark.id)) {
+                        return; // already scheduled for removal
+                    }
                     if (bookmark.lineNumber !== undefined) {
-                        const bookmarkLine = bookmark.lineNumber;
+            const bookmarkLine = bookmark.lineNumber;        // 1-based
+            const bmZero = bookmarkLine - 1;                 // normalize to 0-based for comparisons
                         let shouldUpdate = false;
+                        let shouldRemove = false;
                         let newLineNumber = bookmarkLine;
                         
-                        if (bookmarkLine > change.range.end.line) {
+            if (bmZero > change.range.end.line) {
                             // Change is before bookmark line - bookmark moves down/up
                             newLineNumber = bookmarkLine + lineDelta;
                             shouldUpdate = true;
-                        } else if (bookmarkLine >= change.range.start.line && bookmarkLine <= change.range.end.line) {
+            } else if (bmZero >= change.range.start.line && bmZero <= change.range.end.line) {
                             // Change affects bookmark line directly
                             if (lineDelta > 0 && change.text.includes('\n')) {
                                 // Line break inserted in bookmark line - determine proper behavior
@@ -111,7 +135,7 @@ export class BookmarkPositionTracker implements vscode.Disposable {
                                 } else {
                                     // Multi-line change - use conservative approach
                                     // Keep bookmark on original line unless it's a pure insertion at start
-                                    if (insertPosition === 0 && change.range.start.line === bookmarkLine) {
+                    if (insertPosition === 0 && change.range.start.line === bmZero) {
                                         newLineNumber = bookmarkLine + lineDelta;
                                         shouldUpdate = true;
                                     } else {
@@ -120,10 +144,21 @@ export class BookmarkPositionTracker implements vscode.Disposable {
                                     }
                                 }
                             } else if (lineDelta < 0) {
-                                // Lines were deleted at bookmark position
-                                // Keep bookmark at the start of the affected range
-                                newLineNumber = Math.max(1, change.range.start.line + 1);
-                                shouldUpdate = true;
+                                // Lines were deleted overlapping the bookmark position
+                                // Heuristic: if deletion starts at column 0 of the bookmark line (common for vim 'dd'), remove bookmark
+                                const startsAtLineStart = change.range.start.character === 0;
+                                const endsAtLineStart = change.range.end.character === 0; // common for full line deletions
+                                const fullLineDeletionHeuristic = startsAtLineStart && (endsAtLineStart || change.range.end.line > change.range.start.line);
+                                // VS Code ranges are end-exclusive; treat end.line as exclusive to avoid removing bookmark when only the previous line is deleted
+                                const bookmarkWithinDeletedSpan = bmZero >= change.range.start.line && bmZero < change.range.end.line;
+
+                                if (fullLineDeletionHeuristic && bookmarkWithinDeletedSpan) {
+                                    shouldRemove = true; // delete the bookmark because its line was removed
+                                } else {
+                                    // Fallback: move bookmark to the start of the affected range
+                                    newLineNumber = Math.max(1, change.range.start.line + 1);
+                                    shouldUpdate = true;
+                                }
                             } else {
                                 // Text insertion/deletion without newlines - bookmark stays put
                                 newLineNumber = bookmarkLine;
@@ -132,7 +167,18 @@ export class BookmarkPositionTracker implements vscode.Disposable {
                         }
                         // If change is after bookmark line, bookmark doesn't move
                         
-                        if (shouldUpdate && newLineNumber >= 1 && newLineNumber !== bookmarkLine) {
+                        if (shouldRemove) {
+                            removedBookmarkIds.add(bookmark.id);
+                            errorHandler.debug('Bookmark removed due to line deletion', {
+                                operation: 'updateBookmarkPositions',
+                                details: {
+                                    bookmarkId: bookmark.id,
+                                    oldLine: bookmarkLine,
+                                    changeRange: `${change.range.start.line}-${change.range.end.line}`,
+                                    reason: 'line-deleted'
+                                }
+                            });
+                        } else if (shouldUpdate && newLineNumber >= 1 && newLineNumber !== bookmarkLine) {
                             bookmark.lineNumber = newLineNumber;
                             updatedBookmarks.push(bookmark);
                             
@@ -147,8 +193,8 @@ export class BookmarkPositionTracker implements vscode.Disposable {
                                     changePosition: change.range.start.character,
                                     hasNewline: change.text.includes('\n'),
                                     changeText: change.text.replace(/\n/g, '\\n').substring(0, 50),
-                                    reason: bookmarkLine > change.range.end.line ? 'before-bookmark' : 
-                                           bookmarkLine >= change.range.start.line ? 'on-bookmark' : 'after-bookmark'
+                    reason: bmZero > change.range.end.line ? 'before-bookmark' : 
+                       bmZero >= change.range.start.line ? 'on-bookmark' : 'after-bookmark'
                                 }
                             });
                         }
@@ -157,7 +203,7 @@ export class BookmarkPositionTracker implements vscode.Disposable {
             }
         }
         
-        return updatedBookmarks;
+    return { updates: updatedBookmarks, removals: Array.from(removedBookmarkIds) };
     }
 
     private calculateLineDelta(change: vscode.TextDocumentContentChangeEvent): number {
@@ -169,7 +215,7 @@ export class BookmarkPositionTracker implements vscode.Disposable {
         return insertedLines - deletedLines;
     }
 
-    private debounceBookmarkUpdate(filePath: string, bookmarks: Bookmark[]): void {
+    private debounceBookmarkUpdate(filePath: string, bookmarks: Bookmark[], removals: string[] = []): void {
         // Clear existing timeout for this file
         const existingTimeout = this.debouncedUpdate.get(filePath);
         if (existingTimeout) {
@@ -190,6 +236,11 @@ export class BookmarkPositionTracker implements vscode.Disposable {
                     });
                 }
 
+                // Apply removals
+                for (const id of removals) {
+                    await this.storageService.removeBookmark(id);
+                }
+
                 // Notify listeners that bookmarks were updated
                 if (this.onBookmarksUpdated) {
                     this.onBookmarksUpdated();
@@ -199,7 +250,7 @@ export class BookmarkPositionTracker implements vscode.Disposable {
 
                 errorHandler.debug('Debounced bookmark update completed', {
                     operation: 'debounceBookmarkUpdate',
-                    details: { filePath, updateCount: bookmarks.length }
+                    details: { filePath, updateCount: bookmarks.length, removeCount: removals.length }
                 });
 
             } catch (error) {

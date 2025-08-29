@@ -209,6 +209,24 @@ export class BookmarkTreeProvider implements
         
         const filePath = activeEditor.document.fileName;
         const currentLine = lineNumber || (activeEditor.selection.active.line + 1);
+
+        // Disallow adding bookmarks on blank lines
+        try {
+            const idx = currentLine - 1;
+            if (idx >= 0 && idx < activeEditor.document.lineCount) {
+                const text = activeEditor.document.lineAt(idx).text;
+                if (text.trim().length === 0) {
+                    errorHandler.warn('Cannot add bookmark to blank line', {
+                        operation: 'addCurrentFileBookmark',
+                        showToUser: true,
+                        userMessage: 'Cannot add a bookmark to a blank line. Place the cursor on a non-empty line.'
+                    });
+                    return;
+                }
+            }
+        } catch {
+            // Ignore and proceed; other validations will catch issues
+        }
         
         // Generate a default label if none provided
         const defaultLabel = label || `${this.getFileName(filePath)}:${currentLine}`;
@@ -300,6 +318,24 @@ export class BookmarkTreeProvider implements
         
         const filePath = activeEditor.document.fileName;
         const currentLine = activeEditor.selection.active.line + 1;
+
+        // Disallow adding bookmarks on blank lines
+        try {
+            const idx = currentLine - 1;
+            if (idx >= 0 && idx < activeEditor.document.lineCount) {
+                const text = activeEditor.document.lineAt(idx).text;
+                if (text.trim().length === 0) {
+                    errorHandler.warn('Cannot add bookmark to blank line', {
+                        operation: 'addCurrentFileBookmarkWithLabel',
+                        showToUser: true,
+                        userMessage: 'Cannot add a bookmark to a blank line. Place the cursor on a non-empty line.'
+                    });
+                    return;
+                }
+            }
+        } catch {
+            // Ignore and proceed; other validations will catch issues
+        }
         const defaultLabel = `${this.getFileName(filePath)}:${currentLine}`;
         
         // Step 1: Get label from user first
