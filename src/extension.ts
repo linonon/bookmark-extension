@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { BookmarkStorageService } from './services/bookmarkStorage';
+import { GutterDecorationService } from './services/gutterDecorationService';
 import { BookmarkTreeProvider } from './providers/bookmarkTreeProvider';
 import { Bookmark, BookmarkItem, CategoryItem } from './models/bookmark';
 import { errorHandler } from './utils/errorHandler';
@@ -8,7 +9,11 @@ export function activate(context: vscode.ExtensionContext) {
 	try {
 		// Initialize services
 		const storageService = new BookmarkStorageService(context);
+		const gutterDecorationService = new GutterDecorationService(storageService, context);
 		const treeProvider = new BookmarkTreeProvider(storageService);
+		
+		// Connect services
+		treeProvider.setGutterDecorationService(gutterDecorationService);
 		
 		// Register tree data provider
 		const treeView = vscode.window.createTreeView('bookmarkerExplorer', {
@@ -62,7 +67,10 @@ export function activate(context: vscode.ExtensionContext) {
 			'bookmarker.removeBookmark': handleRemoveBookmark,
 			'bookmarker.editBookmarkLabel': handleEditBookmarkLabel,
 			'bookmarker.clearAllBookmarks': () => treeProvider.clearAllBookmarks(),
-			'bookmarker.refreshBookmarks': () => treeProvider.refresh(),
+			'bookmarker.refreshBookmarks': () => {
+				treeProvider.refresh();
+				gutterDecorationService.refreshAllDecorations();
+			},
 			'bookmarker.openBookmark': (bookmark: Bookmark) => treeProvider.openBookmarkFile(bookmark),
 			'bookmarker.renameCategory': handleRenameCategory,
 			'bookmarker.removeCategory': handleRemoveCategory,
@@ -76,7 +84,7 @@ export function activate(context: vscode.ExtensionContext) {
 		);
 		
 		// Add all disposables to context
-		context.subscriptions.push(treeView, ...commands);
+		context.subscriptions.push(treeView, gutterDecorationService, ...commands);
 		
 		// Initialize error handler
 		errorHandler.info('Bookmarker extension activated', {

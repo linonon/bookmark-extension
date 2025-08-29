@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { Bookmark, BookmarkItem, CategoryItem, CategoryNode } from '../models/bookmark';
 import { BookmarkStorageService } from '../services/bookmarkStorage';
+import { GutterDecorationService } from '../services/gutterDecorationService';
 import { errorHandler } from '../utils/errorHandler';
 import { DRAG_DROP, CATEGORIES } from '../constants';
 import { InputValidator } from '../utils/validation';
@@ -16,8 +17,13 @@ export class BookmarkTreeProvider implements
     // Drag and drop MIME types
     readonly dropMimeTypes = [DRAG_DROP.MIME_TYPE];
     readonly dragMimeTypes = [DRAG_DROP.MIME_TYPE, DRAG_DROP.URI_LIST_MIME_TYPE];
+    private gutterDecorationService?: GutterDecorationService;
     
     constructor(private storageService: BookmarkStorageService) {}
+    
+    setGutterDecorationService(gutterService: GutterDecorationService): void {
+        this.gutterDecorationService = gutterService;
+    }
     
     private sortTreeItems(items: (BookmarkItem | CategoryItem)[]): (BookmarkItem | CategoryItem)[] {
         return items.sort((a, b) => {
@@ -240,6 +246,11 @@ export class BookmarkTreeProvider implements
         
         await this.storageService.addBookmark(bookmark);
         this.refresh();
+        
+        // Update gutter decorations for the current file
+        if (this.gutterDecorationService) {
+            await this.gutterDecorationService.updateDecorationsForFile(filePath);
+        }
     }
     
     async addCurrentFileBookmarkWithLabel(): Promise<void> {
@@ -305,11 +316,22 @@ export class BookmarkTreeProvider implements
         
         await this.storageService.addBookmark(bookmark);
         this.refresh();
+        
+        // Update gutter decorations for the current file
+        if (this.gutterDecorationService) {
+            await this.gutterDecorationService.updateDecorationsForFile(filePath);
+        }
     }
     
     async removeBookmark(bookmarkItem: BookmarkItem): Promise<void> {
+        const filePath = bookmarkItem.bookmark.filePath;
         await this.storageService.removeBookmark(bookmarkItem.bookmark.id);
         this.refresh();
+        
+        // Update gutter decorations for the affected file
+        if (this.gutterDecorationService) {
+            await this.gutterDecorationService.updateDecorationsForFile(filePath);
+        }
     }
     
     async removeMultipleBookmarks(bookmarkItems: BookmarkItem[]): Promise<void> {
@@ -336,12 +358,22 @@ export class BookmarkTreeProvider implements
             return;
         }
         
-        // Remove all bookmarks
+        // Remove all bookmarks and collect affected files
+        const affectedFiles = new Set<string>();
         for (const bookmarkItem of bookmarkItems) {
+            affectedFiles.add(bookmarkItem.bookmark.filePath);
             await this.storageService.removeBookmark(bookmarkItem.bookmark.id);
         }
         
         this.refresh();
+        
+        // Update gutter decorations for all affected files
+        if (this.gutterDecorationService) {
+            for (const filePath of affectedFiles) {
+                await this.gutterDecorationService.updateDecorationsForFile(filePath);
+            }
+        }
+        
         errorHandler.showInfo(`Successfully deleted ${bookmarkItems.length} bookmarks.`);
     }
     
@@ -363,6 +395,11 @@ export class BookmarkTreeProvider implements
             if (validation.isValid && validation.sanitized) {
                 await this.storageService.updateBookmark(bookmarkItem.bookmark.id, { label: validation.sanitized });
                 this.refresh();
+                
+                // Update gutter decorations for the affected file (label change affects hover message)
+                if (this.gutterDecorationService) {
+                    await this.gutterDecorationService.updateDecorationsForFile(bookmarkItem.bookmark.filePath);
+                }
                 
                 errorHandler.debug('Bookmark label updated', {
                     operation: 'editBookmarkLabel',
@@ -394,6 +431,11 @@ export class BookmarkTreeProvider implements
         if (confirmation === 'Yes') {
             await this.storageService.clearAllBookmarks();
             this.refresh();
+            
+            // Clear all gutter decorations
+            if (this.gutterDecorationService) {
+                this.gutterDecorationService.clearAllDecorations();
+            }
         }
     }
     
