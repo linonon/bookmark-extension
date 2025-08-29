@@ -142,3 +142,43 @@ While the current implementation is feature-complete, potential future enhanceme
 ---
 
 **Your bookmark extension is now a production-ready VS Code extension with enterprise-level features!** 🎉
+
+
+当前只有命令图标，但没有扩展本身的图标。需要添加扩展图标：
+
+  🎨 添加扩展图标步骤
+
+  1. 创建图标文件
+
+  你需要一个 128x128像素 的PNG图标文件，建议放在项目根目录或images/文件夹中。
+
+  2. 在package.json中添加图标配置
+
+⏺ Update(package.json)
+  ⎿  Updated package.json with 1 addition                                                               
+        4      "description": "Bookmarker - Bookmark and organize your favorite files for quick access",
+        5      "version": "0.0.1",
+        6      "publisher": "linonon",
+        7 +    "icon": "icon.png",
+        8      "engines": {
+        9        "vscode": "^1.103.0"
+       10      },
+
+⏺ 📋 图标要求
+
+  文件格式: PNG尺寸: 128x128 像素位置: 项目根目录（与package.json同级）文件名: icon.png（已在package.json中配置）
+
+  🎯 创建图标建议
+
+  你可以：
+  1. 设计书签相关图标 - 体现书签管理功能
+  2. 使用在线工具 - 如Canva、Figma等设计
+  3. 参考现有图标 - VS Code Marketplace上的其他扩展
+
+  示例图标创意:
+  - 📖 书本 + 书签
+  - 🔖 书签标签
+  - 📂 文件夹 + 星标
+  - ⭐ 收藏星星
+
+  创建好icon.png文件后，扩展就会显示你的自定义图标了！

@@ -5,83 +5,91 @@ import { Bookmark, BookmarkItem, CategoryItem } from './models/bookmark';
 import { errorHandler } from './utils/errorHandler';
 
 export function activate(context: vscode.ExtensionContext) {
-	// Initialize services
-	const storageService = new BookmarkStorageService(context);
-	const treeProvider = new BookmarkTreeProvider(storageService);
-	
-	// Register tree data provider
-	const treeView = vscode.window.createTreeView('bookmarkerExplorer', {
-		treeDataProvider: treeProvider,
-		showCollapseAll: true,
-		canSelectMany: true,
-		dragAndDropController: treeProvider
-	});
+	try {
+		// Initialize services
+		const storageService = new BookmarkStorageService(context);
+		const treeProvider = new BookmarkTreeProvider(storageService);
+		
+		// Register tree data provider
+		const treeView = vscode.window.createTreeView('bookmarkerExplorer', {
+			treeDataProvider: treeProvider,
+			showCollapseAll: true,
+			canSelectMany: true,
+			dragAndDropController: treeProvider
+		});
 
-	// Command handler functions
-	const handleRemoveBookmark = (item: BookmarkItem, allSelected?: BookmarkItem[]) => {
-		if (allSelected && allSelected.length > 1) {
-			// Multi-selection: remove all selected bookmarks
-			const bookmarkItems = allSelected.filter(selected => selected instanceof BookmarkItem && selected.bookmark);
-			if (bookmarkItems.length > 0) {
-				return treeProvider.removeMultipleBookmarks(bookmarkItems);
+		// Command handler functions
+		const handleRemoveBookmark = (item: BookmarkItem, allSelected?: BookmarkItem[]) => {
+			if (allSelected && allSelected.length > 1) {
+				// Multi-selection: remove all selected bookmarks
+				const bookmarkItems = allSelected.filter(selected => selected instanceof BookmarkItem && selected.bookmark);
+				if (bookmarkItems.length > 0) {
+					return treeProvider.removeMultipleBookmarks(bookmarkItems);
+				}
+			} else if (item?.bookmark) {
+				// Single selection: remove single bookmark
+				return treeProvider.removeBookmark(item);
 			}
-		} else if (item?.bookmark) {
-			// Single selection: remove single bookmark
-			return treeProvider.removeBookmark(item);
-		}
-		// Return undefined for cases where no action is taken
-		return undefined;
-	};
+			// Return undefined for cases where no action is taken
+			return undefined;
+		};
 
-	const handleEditBookmarkLabel = (item: BookmarkItem, allSelected?: BookmarkItem[]) => {
-		// Only allow editing single bookmark labels
-		if (allSelected && allSelected.length > 1) {
-			vscode.window.showInformationMessage('Label editing is only available for single bookmarks. Please select one bookmark.');
-			return;
-		}
-		return item?.bookmark && treeProvider.editBookmarkLabel(item);
-	};
+		const handleEditBookmarkLabel = (item: BookmarkItem, allSelected?: BookmarkItem[]) => {
+			// Only allow editing single bookmark labels
+			if (allSelected && allSelected.length > 1) {
+				vscode.window.showInformationMessage('Label editing is only available for single bookmarks. Please select one bookmark.');
+				return;
+			}
+			return item?.bookmark && treeProvider.editBookmarkLabel(item);
+		};
 
-	const handleRenameCategory = (item: CategoryItem) => {
-		return item?.categoryName && treeProvider.renameCategory(item);
-	};
+		const handleRenameCategory = (item: CategoryItem) => {
+			return item?.categoryName && treeProvider.renameCategory(item);
+		};
 
-	const handleRemoveCategory = (item: CategoryItem) => {
-		return item?.categoryName && treeProvider.removeCategory(item);
-	};
+		const handleRemoveCategory = (item: CategoryItem) => {
+			return item?.categoryName && treeProvider.removeCategory(item);
+		};
 
-	const handleAddSubCategory = (item: CategoryItem) => {
-		return item?.fullPath && treeProvider.addSubCategory(item);
-	};
+		const handleAddSubCategory = (item: CategoryItem) => {
+			return item?.fullPath && treeProvider.addSubCategory(item);
+		};
 	
-	// Register commands
-	const commandMap = {
-		'bookmarker.addBookmark': () => treeProvider.addCurrentFileBookmark(),
-		'bookmarker.addBookmarkWithLabel': () => treeProvider.addCurrentFileBookmarkWithLabel(),
-		'bookmarker.removeBookmark': handleRemoveBookmark,
-		'bookmarker.editBookmarkLabel': handleEditBookmarkLabel,
-		'bookmarker.clearAllBookmarks': () => treeProvider.clearAllBookmarks(),
-		'bookmarker.refreshBookmarks': () => treeProvider.refresh(),
-		'bookmarker.openBookmark': (bookmark: Bookmark) => treeProvider.openBookmarkFile(bookmark),
-		'bookmarker.renameCategory': handleRenameCategory,
-		'bookmarker.removeCategory': handleRemoveCategory,
-		'bookmarker.createNewCategory': () => treeProvider.createNewCategory(),
-		'bookmarker.searchBookmarks': () => treeProvider.searchBookmarks(),
-		'bookmarker.addSubCategory': handleAddSubCategory
-	};
+		// Register commands
+		const commandMap = {
+			'bookmarker.addBookmark': () => treeProvider.addCurrentFileBookmark(),
+			'bookmarker.addBookmarkWithLabel': () => treeProvider.addCurrentFileBookmarkWithLabel(),
+			'bookmarker.removeBookmark': handleRemoveBookmark,
+			'bookmarker.editBookmarkLabel': handleEditBookmarkLabel,
+			'bookmarker.clearAllBookmarks': () => treeProvider.clearAllBookmarks(),
+			'bookmarker.refreshBookmarks': () => treeProvider.refresh(),
+			'bookmarker.openBookmark': (bookmark: Bookmark) => treeProvider.openBookmarkFile(bookmark),
+			'bookmarker.renameCategory': handleRenameCategory,
+			'bookmarker.removeCategory': handleRemoveCategory,
+			'bookmarker.createNewCategory': () => treeProvider.createNewCategory(),
+			'bookmarker.searchBookmarks': () => treeProvider.searchBookmarks(),
+			'bookmarker.addSubCategory': handleAddSubCategory
+		};
 
-	const commands = Object.entries(commandMap).map(([name, handler]) =>
-		vscode.commands.registerCommand(name, handler)
-	);
-	
-	// Add all disposables to context
-	context.subscriptions.push(treeView, ...commands);
-	
-	// Initialize error handler
-	errorHandler.info('Bookmarker extension activated', {
-		operation: 'activate',
-		showToUser: false
-	});
+		const commands = Object.entries(commandMap).map(([name, handler]) =>
+			vscode.commands.registerCommand(name, handler)
+		);
+		
+		// Add all disposables to context
+		context.subscriptions.push(treeView, ...commands);
+		
+		// Initialize error handler
+		errorHandler.info('Bookmarker extension activated', {
+			operation: 'activate',
+			showToUser: false
+		});
+	} catch (error) {
+		errorHandler.error('Failed to activate Bookmarker extension', error as Error, {
+			operation: 'activate',
+			showToUser: true
+		});
+		throw error;
+	}
 }
 
 export function deactivate() {
