@@ -78,6 +78,11 @@
         "command": "bookmarker.setCategoryColor",
         "title": "Bookmarker: Set Category Color",
         "icon": "$(symbol-color)"
+      },
+      {
+        "command": "bookmarker.generateMissingAnchors",
+        "title": "Bookmarker: Generate Missing Position Anchors",
+        "icon": "$(sync)"
       }
     ],
     "views": {
@@ -236,6 +241,25 @@
           ],
           "default": "errors-warnings",
           "description": "Control which types of notifications to show"
+        },
+        "bookmarker.positionTracking.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic position tracking for bookmarks when file content changes"
+        },
+        "bookmarker.positionTracking.anchorLength": {
+          "type": "number",
+          "default": 50,
+          "minimum": 10,
+          "maximum": 200,
+          "description": "Number of characters to use for content anchor generation (used for position tracking)"
+        },
+        "bookmarker.positionTracking.updateThrottleMs": {
+          "type": "number",
+          "default": 100,
+          "minimum": 50,
+          "maximum": 1000,
+          "description": "Throttle time in milliseconds for position updates (lower values improve responsiveness but increase CPU usage)"
         }
       }
     }

@@ -3,6 +3,7 @@ import { Bookmark, BookmarkItem, CategoryItem, CategoryNode } from '../models/bo
 import { BookmarkStorageService } from '../services/bookmarkStorage';
 import { GutterDecorationService } from '../services/gutterDecorationService';
 import { CategoryColorService } from '../services/categoryColorService';
+import { ContentAnchorService } from '../services/contentAnchorService';
 import { errorHandler } from '../utils/errorHandler';
 import { DRAG_DROP, CATEGORIES } from '../constants';
 import { InputValidator } from '../utils/validation';
@@ -20,6 +21,7 @@ export class BookmarkTreeProvider implements
     readonly dragMimeTypes = [DRAG_DROP.MIME_TYPE, DRAG_DROP.URI_LIST_MIME_TYPE];
     private gutterDecorationService?: GutterDecorationService;
     private categoryColorService?: CategoryColorService;
+    private contentAnchorService?: ContentAnchorService;
     
     constructor(private storageService: BookmarkStorageService) {}
     
@@ -29,6 +31,10 @@ export class BookmarkTreeProvider implements
     
     setCategoryColorService(colorService: CategoryColorService): void {
         this.categoryColorService = colorService;
+    }
+    
+    setContentAnchorService(anchorService: ContentAnchorService): void {
+        this.contentAnchorService = anchorService;
     }
     
     private sortTreeItems(items: (BookmarkItem | CategoryItem)[]): (BookmarkItem | CategoryItem)[] {
@@ -240,6 +246,27 @@ export class BookmarkTreeProvider implements
         }
         
         const workspaceFolder = vscode.workspace.getWorkspaceFolder(activeEditor.document.uri);
+        
+        // Generate content anchor for position tracking
+        let contentAnchor: string | undefined;
+        let lastKnownContent: string | undefined;
+        
+        try {
+            const lineIndex = currentLine - 1;
+            if (lineIndex >= 0 && lineIndex < activeEditor.document.lineCount) {
+                const lineText = activeEditor.document.lineAt(lineIndex).text;
+                if (this.contentAnchorService) {
+                    contentAnchor = this.contentAnchorService.generateAnchor(lineText);
+                    lastKnownContent = lineText;
+                }
+            }
+        } catch (error) {
+            errorHandler.debug('Failed to generate content anchor for new bookmark', {
+                operation: 'addCurrentFileBookmark',
+                details: { filePath, lineNumber: currentLine }
+            });
+        }
+        
         const bookmark: Bookmark = {
             id: this.storageService.generateBookmarkId(),
             filePath: filePath,
@@ -247,7 +274,12 @@ export class BookmarkTreeProvider implements
             lineNumber: currentLine,
             workspacePath: workspaceFolder?.uri.fsPath ?? undefined,
             category: selectedCategory,
-            createdAt: new Date()
+            createdAt: new Date(),
+            
+            // Position tracking fields - only set if they exist
+            ...(contentAnchor && { contentAnchor }),
+            ...(lastKnownContent && { lastKnownContent }),
+            trackingEnabled: true  // Enable tracking by default for new bookmarks
         };
         
         await this.storageService.addBookmark(bookmark);
@@ -310,6 +342,27 @@ export class BookmarkTreeProvider implements
         }
         
         const workspaceFolder = vscode.workspace.getWorkspaceFolder(activeEditor.document.uri);
+        
+        // Generate content anchor for position tracking
+        let contentAnchor: string | undefined;
+        let lastKnownContent: string | undefined;
+        
+        try {
+            const lineIndex = currentLine - 1;
+            if (lineIndex >= 0 && lineIndex < activeEditor.document.lineCount) {
+                const lineText = activeEditor.document.lineAt(lineIndex).text;
+                if (this.contentAnchorService) {
+                    contentAnchor = this.contentAnchorService.generateAnchor(lineText);
+                    lastKnownContent = lineText;
+                }
+            }
+        } catch (error) {
+            errorHandler.debug('Failed to generate content anchor for new bookmark', {
+                operation: 'addCurrentFileBookmarkWithLabel',
+                details: { filePath, lineNumber: currentLine }
+            });
+        }
+        
         const bookmark: Bookmark = {
             id: this.storageService.generateBookmarkId(),
             filePath: filePath,
@@ -317,7 +370,12 @@ export class BookmarkTreeProvider implements
             lineNumber: currentLine,
             workspacePath: workspaceFolder?.uri.fsPath ?? undefined,
             category: selectedCategory,
-            createdAt: new Date()
+            createdAt: new Date(),
+            
+            // Position tracking fields - only set if they exist
+            ...(contentAnchor && { contentAnchor }),
+            ...(lastKnownContent && { lastKnownContent }),
+            trackingEnabled: true  // Enable tracking by default for new bookmarks
         };
         
         await this.storageService.addBookmark(bookmark);

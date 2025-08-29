@@ -27,6 +27,11 @@ export interface Bookmark {
     workspacePath?: string | undefined;
     category?: string | null | undefined;
     createdAt: Date;
+    
+    // Dynamic position tracking fields
+    contentAnchor?: string;           // Partial content of the line for position tracking
+    lastKnownContent?: string;        // Complete line content snapshot
+    trackingEnabled?: boolean;        // Whether position tracking is enabled for this bookmark
 }
 
 export interface CategoryNode {

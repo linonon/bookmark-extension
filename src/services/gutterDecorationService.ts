@@ -73,11 +73,11 @@ export class GutterDecorationService {
         }
     }
 
-    private async onDocumentChanged(event: vscode.TextDocumentChangeEvent): Promise<void> {
-        const editor = vscode.window.activeTextEditor;
-        if (editor && editor.document === event.document) {
-            await this.updateDecorationsForEditor(editor);
-        }
+    private async onDocumentChanged(_event: vscode.TextDocumentChangeEvent): Promise<void> {
+        // Don't immediately update decorations on document change
+        // Let the BookmarkPositionTracker handle position updates first
+        // Decorations will be updated via the positionTracker callback
+        // This prevents showing stale bookmark positions
     }
 
     async updateDecorationsForEditor(editor: vscode.TextEditor): Promise<void> {

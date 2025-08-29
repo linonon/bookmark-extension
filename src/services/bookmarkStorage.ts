@@ -95,18 +95,56 @@ export class BookmarkStorageService {
             if (existingBookmark) {
                 // Only update properties that are provided in updates
                 const updatedBookmark: Bookmark = {
+                    ...existingBookmark,
+                    ...updates,
+                    // Ensure core required fields are preserved
                     id: updates.id ?? existingBookmark.id,
                     filePath: updates.filePath ?? existingBookmark.filePath,
-                    label: updates.label !== undefined ? updates.label : existingBookmark.label,
-                    lineNumber: updates.lineNumber !== undefined ? updates.lineNumber : existingBookmark.lineNumber,
-                    workspacePath: updates.workspacePath !== undefined ? updates.workspacePath : existingBookmark.workspacePath,
-                    category: updates.category !== undefined ? updates.category : existingBookmark.category,
                     createdAt: updates.createdAt ?? existingBookmark.createdAt
                 };
                 bookmarks[bookmarkIndex] = updatedBookmark;
                 await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
             }
         }
+    }
+    
+    async batchUpdateBookmarks(updates: Array<{ id: string; updates: Partial<Bookmark> }>): Promise<void> {
+        await errorHandler.handleAsync(
+            async () => {
+                const bookmarks = await this.getBookmarks();
+                let hasChanges = false;
+                
+                for (const { id, updates: bookmarkUpdates } of updates) {
+                    const bookmarkIndex = bookmarks.findIndex(b => b.id === id);
+                    
+                    if (bookmarkIndex >= 0) {
+                        const existingBookmark = bookmarks[bookmarkIndex];
+                        if (existingBookmark) {
+                            const updatedBookmark: Bookmark = {
+                                ...existingBookmark,
+                                ...bookmarkUpdates,
+                                // Ensure core required fields are preserved
+                                id: bookmarkUpdates.id ?? existingBookmark.id,
+                                filePath: bookmarkUpdates.filePath ?? existingBookmark.filePath,
+                                createdAt: bookmarkUpdates.createdAt ?? existingBookmark.createdAt
+                            };
+                            bookmarks[bookmarkIndex] = updatedBookmark;
+                            hasChanges = true;
+                        }
+                    }
+                }
+                
+                if (hasChanges) {
+                    await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
+                    this.clearCaches();
+                }
+            },
+            {
+                operation: 'batchUpdateBookmarks',
+                details: { updateCount: updates.length },
+                showToUser: false
+            }
+        );
     }
     
     async clearAllBookmarks(): Promise<void> {

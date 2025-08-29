@@ -2,21 +2,33 @@ import * as vscode from 'vscode';
 import { BookmarkStorageService } from './services/bookmarkStorage';
 import { GutterDecorationService } from './services/gutterDecorationService';
 import { CategoryColorService } from './services/categoryColorService';
+import { BookmarkPositionTracker } from './services/bookmarkPositionTracker';
+import { ContentAnchorService } from './services/contentAnchorService';
 import { BookmarkTreeProvider } from './providers/bookmarkTreeProvider';
 import { Bookmark, BookmarkItem, CategoryItem } from './models/bookmark';
 import { errorHandler } from './utils/errorHandler';
 
 export function activate(context: vscode.ExtensionContext) {
 	try {
-		// Initialize services
+		// Initialize core services
 		const storageService = new BookmarkStorageService(context);
 		const categoryColorService = new CategoryColorService(context);
 		const gutterDecorationService = new GutterDecorationService(storageService, context, categoryColorService);
+		
+		// Initialize position tracking services
+		const contentAnchorService = new ContentAnchorService(storageService);
+		const positionTracker = new BookmarkPositionTracker(storageService, () => {
+			// Callback to refresh tree view when bookmarks are updated
+			treeProvider.refresh();
+			gutterDecorationService.refreshAllDecorations();
+		});
+		
 		const treeProvider = new BookmarkTreeProvider(storageService);
 		
 		// Connect services
 		treeProvider.setGutterDecorationService(gutterDecorationService);
 		treeProvider.setCategoryColorService(categoryColorService);
+		treeProvider.setContentAnchorService(contentAnchorService);
 		
 		// Register tree data provider
 		const treeView = vscode.window.createTreeView('bookmarkerExplorer', {
@@ -84,7 +96,16 @@ export function activate(context: vscode.ExtensionContext) {
 			'bookmarker.createNewCategory': () => treeProvider.createNewCategory(),
 			'bookmarker.searchBookmarks': () => treeProvider.searchBookmarks(),
 			'bookmarker.addSubCategory': handleAddSubCategory,
-			'bookmarker.setCategoryColor': handleSetCategoryColor
+			'bookmarker.setCategoryColor': handleSetCategoryColor,
+			'bookmarker.generateMissingAnchors': async () => {
+				const count = await contentAnchorService.generateMissingAnchors();
+				if (count > 0) {
+					vscode.window.showInformationMessage(`Generated content anchors for ${count} bookmarks. Position tracking is now active for these bookmarks.`);
+					treeProvider.refresh();
+				} else {
+					vscode.window.showInformationMessage('All bookmarks already have content anchors for position tracking.');
+				}
+			}
 		};
 
 		const commands = Object.entries(commandMap).map(([name, handler]) =>
@@ -92,10 +113,28 @@ export function activate(context: vscode.ExtensionContext) {
 		);
 		
 		// Add all disposables to context
-		context.subscriptions.push(treeView, gutterDecorationService, ...commands);
+		context.subscriptions.push(treeView, gutterDecorationService, positionTracker, ...commands);
 		
+		// Initialize missing content anchors for existing bookmarks on startup
+		setTimeout(async () => {
+			try {
+				const generatedCount = await contentAnchorService.generateMissingAnchors();
+				if (generatedCount > 0) {
+					errorHandler.info(`Auto-generated content anchors for ${generatedCount} existing bookmarks`, {
+						operation: 'activate',
+						showToUser: false
+					});
+				}
+			} catch (error) {
+				errorHandler.debug('Failed to auto-generate missing anchors on startup', {
+					operation: 'activate',
+					details: { error: error instanceof Error ? error.message : String(error) }
+				});
+			}
+		}, 2000); // Delay to avoid blocking extension activation
+
 		// Initialize error handler
-		errorHandler.info('Bookmarker extension activated', {
+		errorHandler.info('Bookmarker extension activated with position tracking', {
 			operation: 'activate',
 			showToUser: false
 		});
