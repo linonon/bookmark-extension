@@ -2,9 +2,9 @@ import { PERFORMANCE } from '../constants';
 import { CategoryNode, Bookmark } from '../models/bookmark';
 
 interface CacheEntry<T> {
-    value: T;
-    timestamp: number;
-    ttl: number;
+    readonly value: T;
+    readonly timestamp: number;
+    readonly ttl: number;
 }
 
 export class Cache<T> {
@@ -59,8 +59,12 @@ export class Cache<T> {
         this.cache.clear();
     }
 
-    // Clean up expired entries
+    // Clean up expired entries with early return optimization
     cleanup(): number {
+        if (this.cache.size === 0) {
+            return 0;
+        }
+
         const now = Date.now();
         let removedCount = 0;
 
@@ -80,7 +84,7 @@ export class Cache<T> {
         return this.cache.size;
     }
 
-    // Get or set pattern - common caching pattern
+    // Get or set pattern with lazy loading and memoization
     async getOrSet(
         key: string, 
         factory: () => Promise<T>, 

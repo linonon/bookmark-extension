@@ -6,7 +6,7 @@ import { CATEGORIES } from '../constants';
 
 suite('Bookmarker Extension Tests', () => {
     test('Extension should activate', async () => {
-        const extension = vscode.extensions.getExtension('linonon.bookmarker');
+        const extension = vscode.extensions.getExtension('linonon.bookmarker'); // cspell:ignore linonon
         assert.ok(extension, 'Extension should be found');
         
         await extension?.activate();

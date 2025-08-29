@@ -12,21 +12,21 @@ export enum CategoryColor {
 }
 
 export interface CategoryColorInfo {
-    id: CategoryColor;
-    name: string;
-    displayName: string;
-    themeColor: string;
-    hexColor: string;
+    readonly id: CategoryColor;
+    readonly name: string;
+    readonly displayName: string;
+    readonly themeColor: string;
+    readonly hexColor: string;
 }
 
 export interface Bookmark {
-    id: string;
-    filePath: string;
-    label?: string | undefined;
-    lineNumber?: number | undefined;
-    workspacePath?: string | undefined;
-    category?: string | null | undefined;
-    createdAt: Date;
+    readonly id: string;
+    readonly filePath: string;
+    label?: string;
+    lineNumber?: number;
+    workspacePath?: string;
+    category?: string | null;
+    readonly createdAt: Date;
     
     // Dynamic position tracking fields
     contentAnchor?: string;           // Partial content of the line for position tracking
@@ -35,10 +35,10 @@ export interface Bookmark {
 }
 
 export interface CategoryNode {
-    name: string;
-    fullPath: string;
-    children: Map<string, CategoryNode>;
-    bookmarks: Bookmark[];
+    readonly name: string;
+    readonly fullPath: string;
+    readonly children: Map<string, CategoryNode>;
+    readonly bookmarks: Bookmark[];
     isExpanded?: boolean;
     color?: CategoryColor;
 }

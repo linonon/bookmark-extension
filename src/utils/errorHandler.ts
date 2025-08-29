@@ -8,10 +8,10 @@ export enum LogLevel {
 }
 
 export interface ErrorContext {
-    operation: string;
-    details?: Record<string, any>;
-    showToUser?: boolean;
-    userMessage?: string;
+    readonly operation: string;
+    readonly details?: Record<string, unknown>;
+    readonly showToUser?: boolean;
+    readonly userMessage?: string;
 }
 
 export class ErrorHandler {
