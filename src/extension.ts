@@ -17,68 +17,24 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	
 	// Register commands
-	const commands = [
-		vscode.commands.registerCommand('bookmarker.addBookmark', async () => {
-			await treeProvider.addCurrentFileBookmark();
-		}),
-		
-		vscode.commands.registerCommand('bookmarker.addBookmarkWithLabel', async () => {
-			await treeProvider.addCurrentFileBookmarkWithLabel();
-		}),
-		
-		vscode.commands.registerCommand('bookmarker.removeBookmark', async (bookmarkItem: BookmarkItem) => {
-			if (bookmarkItem && bookmarkItem.bookmark) {
-				await treeProvider.removeBookmark(bookmarkItem);
-			}
-		}),
-		
-		vscode.commands.registerCommand('bookmarker.editBookmarkLabel', async (bookmarkItem: BookmarkItem) => {
-			if (bookmarkItem && bookmarkItem.bookmark) {
-				await treeProvider.editBookmarkLabel(bookmarkItem);
-			}
-		}),
-		
-		vscode.commands.registerCommand('bookmarker.clearAllBookmarks', async () => {
-			await treeProvider.clearAllBookmarks();
-		}),
-		
-		vscode.commands.registerCommand('bookmarker.refreshBookmarks', () => {
-			treeProvider.refresh();
-		}),
-		
-		// Command for opening bookmarked files (used by TreeItem command)
-		vscode.commands.registerCommand('bookmarker.openBookmark', async (bookmark) => {
-			await treeProvider.openBookmarkFile(bookmark);
-		}),
-		
-		// Category management commands
-		
-		vscode.commands.registerCommand('bookmarker.renameCategory', async (categoryItem: CategoryItem) => {
-			if (categoryItem && categoryItem.categoryName) {
-				await treeProvider.renameCategory(categoryItem);
-			}
-		}),
-		
-		vscode.commands.registerCommand('bookmarker.removeCategory', async (categoryItem: CategoryItem) => {
-			if (categoryItem && categoryItem.categoryName) {
-				await treeProvider.removeCategory(categoryItem);
-			}
-		}),
-		
-		vscode.commands.registerCommand('bookmarker.createNewCategory', async () => {
-			await treeProvider.createNewCategory();
-		}),
-		
-		vscode.commands.registerCommand('bookmarker.searchBookmarks', async () => {
-			await treeProvider.searchBookmarks();
-		}),
-		
-		vscode.commands.registerCommand('bookmarker.addSubCategory', async (categoryItem: CategoryItem) => {
-			if (categoryItem && categoryItem.fullPath) {
-				await treeProvider.addSubCategory(categoryItem);
-			}
-		})
-	];
+	const commandMap = {
+		'bookmarker.addBookmark': () => treeProvider.addCurrentFileBookmark(),
+		'bookmarker.addBookmarkWithLabel': () => treeProvider.addCurrentFileBookmarkWithLabel(),
+		'bookmarker.removeBookmark': (item: BookmarkItem) => item?.bookmark && treeProvider.removeBookmark(item),
+		'bookmarker.editBookmarkLabel': (item: BookmarkItem) => item?.bookmark && treeProvider.editBookmarkLabel(item),
+		'bookmarker.clearAllBookmarks': () => treeProvider.clearAllBookmarks(),
+		'bookmarker.refreshBookmarks': () => treeProvider.refresh(),
+		'bookmarker.openBookmark': (bookmark: any) => treeProvider.openBookmarkFile(bookmark),
+		'bookmarker.renameCategory': (item: CategoryItem) => item?.categoryName && treeProvider.renameCategory(item),
+		'bookmarker.removeCategory': (item: CategoryItem) => item?.categoryName && treeProvider.removeCategory(item),
+		'bookmarker.createNewCategory': () => treeProvider.createNewCategory(),
+		'bookmarker.searchBookmarks': () => treeProvider.searchBookmarks(),
+		'bookmarker.addSubCategory': (item: CategoryItem) => item?.fullPath && treeProvider.addSubCategory(item)
+	};
+
+	const commands = Object.entries(commandMap).map(([name, handler]) =>
+		vscode.commands.registerCommand(name, handler)
+	);
 	
 	// Add all disposables to context
 	context.subscriptions.push(treeView, ...commands);

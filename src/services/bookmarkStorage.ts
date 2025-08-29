@@ -9,19 +9,35 @@ export class BookmarkStorageService {
     constructor(private context: vscode.ExtensionContext) {}
     
     async getBookmarks(): Promise<BookmarkData> {
-        return this.getWorkspaceBookmarks();
+        const bookmarks = this.context.workspaceState.get<BookmarkData>(BookmarkStorageService.WORKSPACE_STORAGE_KEY, []);
+        return this.filterValidBookmarks(bookmarks);
     }
     
     async addBookmark(bookmark: Bookmark): Promise<void> {
-        await this.addWorkspaceBookmark(bookmark);
+        const bookmarks = await this.getBookmarks();
+        
+        // Check if bookmark already exists for this file
+        const existingIndex = bookmarks.findIndex(b => 
+            b.filePath === bookmark.filePath && b.lineNumber === bookmark.lineNumber
+        );
+        
+        if (existingIndex >= 0) {
+            bookmarks[existingIndex] = bookmark;
+        } else {
+            bookmarks.push(bookmark);
+        }
+        
+        await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
     }
     
     async removeBookmark(bookmarkId: string): Promise<void> {
-        await this.removeWorkspaceBookmark(bookmarkId);
+        const bookmarks = await this.getBookmarks();
+        const filteredBookmarks = bookmarks.filter(b => b.id !== bookmarkId);
+        await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, filteredBookmarks);
     }
     
     async removeBookmarkByPath(filePath: string, lineNumber?: number): Promise<void> {
-        const bookmarks = await this.getWorkspaceBookmarks();
+        const bookmarks = await this.getBookmarks();
         const filteredBookmarks = bookmarks.filter(b => {
             if (lineNumber !== undefined) {
                 return !(b.filePath === filePath && b.lineNumber === lineNumber);
@@ -32,7 +48,7 @@ export class BookmarkStorageService {
     }
     
     async updateBookmark(bookmarkId: string, updates: Partial<Bookmark>): Promise<void> {
-        const bookmarks = await this.getWorkspaceBookmarks();
+        const bookmarks = await this.getBookmarks();
         const bookmarkIndex = bookmarks.findIndex(b => b.id === bookmarkId);
         
         if (bookmarkIndex >= 0) {
@@ -42,7 +58,7 @@ export class BookmarkStorageService {
     }
     
     async clearAllBookmarks(): Promise<void> {
-        await this.clearWorkspaceBookmarks();
+        await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, []);
     }
     
     async replaceAllBookmarks(bookmarks: BookmarkData): Promise<void> {
@@ -199,42 +215,6 @@ export class BookmarkStorageService {
         await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, updatedBookmarks);
     }
     
-    
-    
-    
-    // Workspace-specific bookmark methods
-    async getWorkspaceBookmarks(): Promise<BookmarkData> {
-        const bookmarks = this.context.workspaceState.get<BookmarkData>(BookmarkStorageService.WORKSPACE_STORAGE_KEY, []);
-        return this.filterValidBookmarks(bookmarks);
-    }
-    
-    
-    async addWorkspaceBookmark(bookmark: Bookmark): Promise<void> {
-        const bookmarks = await this.getWorkspaceBookmarks();
-        
-        // Check if bookmark already exists for this file
-        const existingIndex = bookmarks.findIndex(b => 
-            b.filePath === bookmark.filePath && b.lineNumber === bookmark.lineNumber
-        );
-        
-        if (existingIndex >= 0) {
-            bookmarks[existingIndex] = bookmark;
-        } else {
-            bookmarks.push(bookmark);
-        }
-        
-        await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
-    }
-    
-    async removeWorkspaceBookmark(bookmarkId: string): Promise<void> {
-        const bookmarks = await this.getWorkspaceBookmarks();
-        const filteredBookmarks = bookmarks.filter(b => b.id !== bookmarkId);
-        await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, filteredBookmarks);
-    }
-    
-    async clearWorkspaceBookmarks(): Promise<void> {
-        await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, []);
-    }
     
     generateBookmarkId(): string {
         return `bookmark_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;

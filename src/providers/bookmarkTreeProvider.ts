@@ -15,6 +15,38 @@ export class BookmarkTreeProvider implements
     
     constructor(private storageService: BookmarkStorageService) {}
     
+    private sortTreeItems(items: (BookmarkItem | CategoryItem)[]): (BookmarkItem | CategoryItem)[] {
+        return items.sort((a, b) => {
+            // Categories first, then bookmarks
+            if (a instanceof CategoryItem && b instanceof BookmarkItem) {
+                return -1;
+            }
+            if (a instanceof BookmarkItem && b instanceof CategoryItem) {
+                return 1;
+            }
+            
+            // Sort categories: default category first, then alphabetically
+            if (a instanceof CategoryItem && b instanceof CategoryItem) {
+                if (a.categoryName === BookmarkStorageService.DEFAULT_CATEGORY) {
+                    return -1;
+                }
+                if (b.categoryName === BookmarkStorageService.DEFAULT_CATEGORY) {
+                    return 1;
+                }
+                return a.categoryName.localeCompare(b.categoryName);
+            }
+            
+            // Sort bookmarks by label
+            if (a instanceof BookmarkItem && b instanceof BookmarkItem) {
+                const aLabel = a.bookmark.label || a.bookmark.filePath;
+                const bLabel = b.bookmark.label || b.bookmark.filePath;
+                return aLabel.localeCompare(bLabel);
+            }
+            
+            return 0;
+        });
+    }
+    
     refresh(): void {
         this._onDidChangeTreeData.fire();
     }
@@ -60,35 +92,7 @@ export class BookmarkTreeProvider implements
                 }
             }
             
-            return result.sort((a, b) => {
-                // Categories first, then bookmarks
-                if (a instanceof CategoryItem && b instanceof BookmarkItem) {
-                    return -1;
-                }
-                if (a instanceof BookmarkItem && b instanceof CategoryItem) {
-                    return 1;
-                }
-                
-                // Sort categories: default category first, then alphabetically
-                if (a instanceof CategoryItem && b instanceof CategoryItem) {
-                    if (a.categoryName === BookmarkStorageService.DEFAULT_CATEGORY) {
-                        return -1;
-                    }
-                    if (b.categoryName === BookmarkStorageService.DEFAULT_CATEGORY) {
-                        return 1;
-                    }
-                    return a.categoryName.localeCompare(b.categoryName);
-                }
-                
-                // Sort bookmarks by label
-                if (a instanceof BookmarkItem && b instanceof BookmarkItem) {
-                    const aLabel = a.bookmark.label || a.bookmark.filePath;
-                    const bLabel = b.bookmark.label || b.bookmark.filePath;
-                    return aLabel.localeCompare(bLabel);
-                }
-                
-                return 0;
-            });
+            return this.sortTreeItems(result);
         }
         
         if (element instanceof CategoryItem) {
@@ -133,29 +137,7 @@ export class BookmarkTreeProvider implements
                 }
             }
             
-            return result.sort((a, b) => {
-                // Categories first, then bookmarks
-                if (a instanceof CategoryItem && b instanceof BookmarkItem) {
-                    return -1;
-                }
-                if (a instanceof BookmarkItem && b instanceof CategoryItem) {
-                    return 1;
-                }
-                
-                // Sort categories alphabetically
-                if (a instanceof CategoryItem && b instanceof CategoryItem) {
-                    return a.categoryName.localeCompare(b.categoryName);
-                }
-                
-                // Sort bookmarks by label
-                if (a instanceof BookmarkItem && b instanceof BookmarkItem) {
-                    const aLabel = a.bookmark.label || a.bookmark.filePath;
-                    const bLabel = b.bookmark.label || b.bookmark.filePath;
-                    return aLabel.localeCompare(bLabel);
-                }
-                
-                return 0;
-            });
+            return this.sortTreeItems(result);
         }
         
         return [];
