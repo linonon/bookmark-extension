@@ -3,7 +3,6 @@ import { Bookmark, BookmarkData, CategoryNode } from '../models/bookmark';
 import * as fs from 'fs';
 
 export class BookmarkStorageService {
-    private static readonly STORAGE_KEY = 'bookmarks';
     private static readonly WORKSPACE_STORAGE_KEY = 'workspace-bookmarks';
     
     constructor(private context: vscode.ExtensionContext) {}
@@ -200,72 +199,8 @@ export class BookmarkStorageService {
         await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, updatedBookmarks);
     }
     
-    private getFileName(filePath: string): string {
-        return filePath.split('/').pop() || filePath;
-    }
     
-    async exportBookmarks(): Promise<string> {
-        const bookmarks = await this.getBookmarks();
-        const exportData = {
-            version: "1.0",
-            exportedAt: new Date().toISOString(),
-            bookmarks: bookmarks
-        };
-        return JSON.stringify(exportData, null, 2);
-    }
     
-    async importBookmarks(jsonData: string, mergeMode: boolean = true): Promise<{ success: number; errors: string[] }> {
-        const result = { success: 0, errors: [] as string[] };
-        
-        try {
-            const importData = JSON.parse(jsonData);
-            
-            if (!importData.bookmarks || !Array.isArray(importData.bookmarks)) {
-                throw new Error('Invalid bookmark format: missing bookmarks array');
-            }
-            
-            const existingBookmarks = mergeMode ? await this.getBookmarks() : [];
-            const importedBookmarks = importData.bookmarks as Bookmark[];
-            
-            // Validate and process each bookmark
-            for (const bookmark of importedBookmarks) {
-                try {
-                    // Validate required fields
-                    if (!bookmark.filePath || !bookmark.id) {
-                        result.errors.push(`Invalid bookmark: missing required fields`);
-                        continue;
-                    }
-                    
-                    // Generate new ID to avoid conflicts
-                    const newBookmark: Bookmark = {
-                        ...bookmark,
-                        id: this.generateBookmarkId(),
-                        createdAt: new Date(bookmark.createdAt || new Date())
-                    };
-                    
-                    // Check if file exists (optional validation)
-                    try {
-                        await fs.promises.access(newBookmark.filePath);
-                    } catch (error) {
-                        // File doesn't exist, but we'll still import it
-                        result.errors.push(`File not found: ${newBookmark.filePath}`);
-                    }
-                    
-                    existingBookmarks.push(newBookmark);
-                    result.success++;
-                } catch (error) {
-                    result.errors.push(`Error processing bookmark: ${error}`);
-                }
-            }
-            
-            await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, existingBookmarks);
-            
-        } catch (error) {
-            result.errors.push(`Import failed: ${error}`);
-        }
-        
-        return result;
-    }
     
     // Workspace-specific bookmark methods
     async getWorkspaceBookmarks(): Promise<BookmarkData> {
@@ -273,16 +208,6 @@ export class BookmarkStorageService {
         return this.filterValidBookmarks(bookmarks);
     }
     
-    async getAllBookmarks(includeWorkspace: boolean = false): Promise<BookmarkData> {
-        const globalBookmarks = await this.getBookmarks();
-        
-        if (!includeWorkspace || !vscode.workspace.workspaceFolders) {
-            return globalBookmarks;
-        }
-        
-        const workspaceBookmarks = await this.getWorkspaceBookmarks();
-        return [...globalBookmarks, ...workspaceBookmarks];
-    }
     
     async addWorkspaceBookmark(bookmark: Bookmark): Promise<void> {
         const bookmarks = await this.getWorkspaceBookmarks();
