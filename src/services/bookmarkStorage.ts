@@ -9,67 +9,51 @@ export class BookmarkStorageService {
     constructor(private context: vscode.ExtensionContext) {}
     
     async getBookmarks(): Promise<BookmarkData> {
-        const bookmarks = this.context.globalState.get<BookmarkData>(BookmarkStorageService.STORAGE_KEY, []);
-        // Filter out bookmarks for files that no longer exist
-        return this.filterValidBookmarks(bookmarks);
+        // Always use workspace storage now
+        return this.getWorkspaceBookmarks();
     }
     
     async addBookmark(bookmark: Bookmark): Promise<void> {
-        const bookmarks = await this.getBookmarks();
-        
-        // Check if bookmark already exists for this file
-        const existingIndex = bookmarks.findIndex(b => 
-            b.filePath === bookmark.filePath && b.lineNumber === bookmark.lineNumber
-        );
-        
-        if (existingIndex >= 0) {
-            // Update existing bookmark
-            bookmarks[existingIndex] = bookmark;
-        } else {
-            // Add new bookmark
-            bookmarks.push(bookmark);
-        }
-        
-        await this.saveBookmarks(bookmarks);
+        // Always use workspace storage now
+        await this.addWorkspaceBookmark(bookmark);
     }
     
     async removeBookmark(bookmarkId: string): Promise<void> {
-        const bookmarks = await this.getBookmarks();
-        const filteredBookmarks = bookmarks.filter(b => b.id !== bookmarkId);
-        await this.saveBookmarks(filteredBookmarks);
+        // Always use workspace storage now
+        await this.removeWorkspaceBookmark(bookmarkId);
     }
     
     async removeBookmarkByPath(filePath: string, lineNumber?: number): Promise<void> {
-        const bookmarks = await this.getBookmarks();
+        // Always use workspace storage now
+        const bookmarks = await this.getWorkspaceBookmarks();
         const filteredBookmarks = bookmarks.filter(b => {
             if (lineNumber !== undefined) {
                 return !(b.filePath === filePath && b.lineNumber === lineNumber);
             }
             return b.filePath !== filePath;
         });
-        await this.saveBookmarks(filteredBookmarks);
+        await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, filteredBookmarks);
     }
     
     async updateBookmark(bookmarkId: string, updates: Partial<Bookmark>): Promise<void> {
-        const bookmarks = await this.getBookmarks();
+        // Always use workspace storage now
+        const bookmarks = await this.getWorkspaceBookmarks();
         const bookmarkIndex = bookmarks.findIndex(b => b.id === bookmarkId);
         
         if (bookmarkIndex >= 0) {
             bookmarks[bookmarkIndex] = { ...bookmarks[bookmarkIndex], ...updates };
-            await this.saveBookmarks(bookmarks);
+            await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
         }
     }
     
     async clearAllBookmarks(): Promise<void> {
-        await this.saveBookmarks([]);
+        // Always use workspace storage now
+        await this.clearWorkspaceBookmarks();
     }
     
     async replaceAllBookmarks(bookmarks: BookmarkData): Promise<void> {
-        await this.saveBookmarks(bookmarks);
-    }
-    
-    private async saveBookmarks(bookmarks: BookmarkData): Promise<void> {
-        await this.context.globalState.update(BookmarkStorageService.STORAGE_KEY, bookmarks);
+        // Always use workspace storage now
+        await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
     }
     
     private async filterValidBookmarks(bookmarks: BookmarkData): Promise<BookmarkData> {
@@ -88,7 +72,7 @@ export class BookmarkStorageService {
         
         // If we filtered out any bookmarks, update the storage
         if (validBookmarks.length !== bookmarks.length) {
-            await this.saveBookmarks(validBookmarks);
+            await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, validBookmarks);
         }
         
         return validBookmarks;
@@ -201,7 +185,7 @@ export class BookmarkStorageService {
         
         if (bookmarkIndex >= 0) {
             bookmarks[bookmarkIndex].category = newCategory;
-            await this.saveBookmarks(bookmarks);
+            await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, bookmarks);
         }
     }
     
@@ -213,7 +197,7 @@ export class BookmarkStorageService {
             }
             return bookmark;
         });
-        await this.saveBookmarks(updatedBookmarks);
+        await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, updatedBookmarks);
     }
     
     private getFileName(filePath: string): string {
@@ -274,7 +258,7 @@ export class BookmarkStorageService {
                 }
             }
             
-            await this.saveBookmarks(existingBookmarks);
+            await this.context.workspaceState.update(BookmarkStorageService.WORKSPACE_STORAGE_KEY, existingBookmarks);
             
         } catch (error) {
             result.errors.push(`Import failed: ${error}`);
@@ -330,4 +314,5 @@ export class BookmarkStorageService {
     generateBookmarkId(): string {
         return `bookmark_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     }
+    
 }
